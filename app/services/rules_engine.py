@@ -73,7 +73,8 @@ def create_alert(
         suggested_action=suggested_action,
         latest_handover=latest_handover,
         content=content,
-        target_roles=target_roles
+        target_roles=target_roles,
+        current_owner_role=responsible_node
     )
     db.add(alert)
     db.flush()

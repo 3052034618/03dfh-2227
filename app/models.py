@@ -110,6 +110,8 @@ class Alert(Base):
     handled_at = Column(DateTime, nullable=True)
     handled_note = Column(Text, nullable=True)
     assigned_to = Column(String(50), nullable=True)
+    current_owner_role = Column(String(50), nullable=True)
+    current_owner_name = Column(String(50), nullable=True)
     last_pushed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
@@ -148,6 +150,8 @@ class AlertDisposal(Base):
     disposal_note = Column(Text, nullable=True)
     assigned_to_role = Column(String(50), nullable=True)
     assigned_to_name = Column(String(50), nullable=True)
+    operator_from_role = Column(String(50), nullable=True)
+    operator_from_name = Column(String(50), nullable=True)
     disposal_result = Column(String(100), nullable=True)
     disposed_at = Column(DateTime, default=datetime.now)
 

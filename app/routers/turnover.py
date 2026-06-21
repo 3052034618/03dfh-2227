@@ -194,6 +194,8 @@ def get_box_timeline(box_no: str, db: Session = Depends(get_db)):
             type_text = "处置" if d.disposal_type == "handle" else "转派"
             icon = "✏️" if d.disposal_type == "handle" else "➡️"
             desc_parts = [f"操作人: {d.operator_name}({d.operator_role})"]
+            if d.operator_from_name:
+                desc_parts.append(f"来源: {d.operator_from_name}({d.operator_from_role})")
             if d.disposal_result:
                 desc_parts.append(f"结果: {d.disposal_result}")
             if d.disposal_note:
@@ -207,7 +209,7 @@ def get_box_timeline(box_no: str, db: Session = Depends(get_db)):
                 "title": f"提醒{type_text}: {d.disposal_result or type_text}",
                 "description": "，".join(desc_parts),
                 "severity": "info",
-                "data": {"id": d.id, "alert_id": d.alert_id, "disposal_type": d.disposal_type, "operator_name": d.operator_name, "operator_role": d.operator_role, "disposal_note": d.disposal_note, "disposal_result": d.disposal_result, "assigned_to_name": d.assigned_to_name, "assigned_to_role": d.assigned_to_role}
+                "data": {"id": d.id, "alert_id": d.alert_id, "disposal_type": d.disposal_type, "operator_name": d.operator_name, "operator_role": d.operator_role, "operator_from_name": d.operator_from_name, "operator_from_role": d.operator_from_role, "disposal_note": d.disposal_note, "disposal_result": d.disposal_result, "assigned_to_name": d.assigned_to_name, "assigned_to_role": d.assigned_to_role}
             })
 
     tasks = db.query(TurnoverTask).filter(

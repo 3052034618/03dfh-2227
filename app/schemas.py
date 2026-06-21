@@ -80,6 +80,8 @@ class AlertResponse(BaseModel):
     handled_at: Optional[datetime]
     handled_note: Optional[str]
     assigned_to: Optional[str]
+    current_owner_role: Optional[str]
+    current_owner_name: Optional[str]
     last_pushed_at: Optional[datetime]
     created_at: datetime
 
@@ -114,6 +116,8 @@ class AlertDisposalResponse(BaseModel):
     disposal_note: Optional[str]
     assigned_to_role: Optional[str]
     assigned_to_name: Optional[str]
+    operator_from_role: Optional[str]
+    operator_from_name: Optional[str]
     disposal_result: Optional[str]
     disposed_at: datetime
 
@@ -210,3 +214,14 @@ class BoxResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DrillDownRequest(BaseModel):
+    dimension: str = Field(..., description="维度: customer/route/box_no/alert_type")
+    dimension_value: str = Field(..., description="维度值")
+
+
+class ExportRequest(BaseModel):
+    start_date: Optional[str] = Field(None, description="开始日期 YYYY-MM-DD")
+    end_date: Optional[str] = Field(None, description="结束日期 YYYY-MM-DD")
+    alert_type: Optional[str] = Field(None, description="异常类型筛选")

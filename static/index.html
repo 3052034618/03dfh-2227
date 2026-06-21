@@ -180,6 +180,7 @@
             <div class="card">
                 <div class="card-header">
                     <h2>🔔 提醒中心</h2>
+                    <button class="btn btn-default btn-sm" onclick="showExportModal()">📥 导出复盘</button>
                 </div>
                 <div class="form-row">
                     <div class="form-item" style="min-width: 150px; flex: none;">
@@ -198,6 +199,16 @@
                             <option value="warehouse">仓库</option>
                             <option value="customer_service">客服</option>
                             <option value="manager">管理人员</option>
+                        </select>
+                    </div>
+                    <div class="form-item" style="min-width: 150px; flex: none;">
+                        <label>按归属角色筛选</label>
+                        <select id="alert-assigned-to" onchange="loadAlerts()">
+                            <option value="">全部</option>
+                            <option value="dispatch">调度</option>
+                            <option value="warehouse">仓库</option>
+                            <option value="customer_service">客服</option>
+                            <option value="manager">管理</option>
                         </select>
                     </div>
                 </div>
@@ -488,17 +499,26 @@
             } catch (e) { console.error(e); }
         }
 
+        const BATCH_ALLOWED_TYPES = ['超期未回', '温控异常'];
+
+        function isBatchAllowed(alertType) {
+            return BATCH_ALLOWED_TYPES.includes(alertType);
+        }
+
         function renderAlertCard(alert, compact = false) {
             const cls = alert.is_handled ? 'handled' : 'unhandled';
+            const batchAllowed = isBatchAllowed(alert.alert_type);
             return `
                 <div class="alert-item ${cls}">
                     <div class="alert-header">
                         <div class="alert-title-wrap">
-                            ${!compact ? `<input type="checkbox" class="alert-checkbox" data-id="${alert.id}" onchange="updateSelectedCount()">` : ''}
+                            ${!compact ? `<input type="checkbox" class="alert-checkbox" data-id="${alert.id}" data-type="${alert.alert_type}" ${!batchAllowed ? 'disabled' : ''} onchange="updateSelectedCount()">` : ''}
                             <span class="alert-title">${alert.alert_type}</span>
                             ${getSeverityTag(alert.severity)}
+                            ${!compact && !batchAllowed ? '<span style="font-size:11px;color:#bfbfbf;margin-left:4px;">不支持批量</span>' : ''}
                             ${alert.box_no ? `<span class="tag tag-info" onclick="viewBoxTimeline('${alert.box_no}')" style="cursor:pointer;" title="查看时间线">📦 ${alert.box_no}</span>` : ''}
                             <span class="tag tag-default">责任: ${alert.responsible_node}</span>
+                            <span class="tag tag-purple">归属: ${alert.current_owner_name || alert.current_owner_role || '-'}</span>
                             ${alert.last_pushed_at ? `<span class="tag tag-success">📡 ${formatTime(alert.last_pushed_at)}</span>` : ''}
                         </div>
                         <button class="btn btn-link btn-sm" onclick="showAlertDetail(${alert.id})">详情 →</button>
@@ -519,10 +539,12 @@
         async function loadAlerts() {
             const filter = document.getElementById('alert-filter').value;
             const role = document.getElementById('alert-role').value;
+            const assignedTo = document.getElementById('alert-assigned-to').value;
             let url = '/alerts?';
             if (filter === 'unhandled') url += 'is_handled=false&';
             else if (filter === 'handled') url += 'is_handled=true&';
             if (role) url += `role=${role}&`;
+            if (assignedTo) url += `assigned_to=${assignedTo}&`;
 
             try {
                 const alerts = await apiCall(url.replace(/&$/, ''));
@@ -565,7 +587,7 @@
                 const disposalsHtml = disposals.length === 0 ? '<div class="empty" style="padding:20px;">暂无处置记录</div>' : `
                     <table class="push-table" style="width:100%;">
                         <thead>
-                            <tr><th>时间</th><th>类型</th><th>操作人</th><th>处理结果</th><th>备注</th></tr>
+                            <tr><th>时间</th><th>类型</th><th>操作人</th><th>从谁</th><th>到谁</th><th>处理结果</th><th>备注</th></tr>
                         </thead>
                         <tbody>
                             ${disposals.map(d => `
@@ -573,6 +595,8 @@
                                     <td style="color:#8c8c8c;font-size:12px;">${formatTime(d.disposed_at)}</td>
                                     <td>${d.disposal_type === 'handle' ? '<span class="disposal-type-tag handle">处置</span>' : '<span class="disposal-type-tag assign">转派</span>'}</td>
                                     <td><strong>${d.operator_name}</strong>${d.operator_role ? ` (${d.operator_role})` : ''}</td>
+                                    <td>${d.disposal_type === 'assign' ? (d.operator_from_name ? `${d.operator_from_name}(${d.operator_from_role || '-'})` : '-') : '-'}</td>
+                                    <td>${d.disposal_type === 'assign' ? (d.assigned_to_name ? `${d.assigned_to_name}(${d.assigned_to_role || '-'})` : '-') : '-'}</td>
                                     <td>${d.disposal_result || '-'}</td>
                                     <td style="font-size:12px;color:#595959;">${d.disposal_note || '-'}</td>
                                 </tr>
@@ -1139,11 +1163,24 @@
         }
 
         function showBatchHandleModal() {
-            const ids = getSelectedAlertIds();
-            if (ids.length === 0) {
+            const allCheckboxes = document.querySelectorAll('.alert-checkbox:checked');
+            const allIds = Array.from(allCheckboxes).map(cb => parseInt(cb.dataset.id));
+            if (allIds.length === 0) {
                 alert('请先选择要处理的提醒');
                 return;
             }
+
+            const allowedIds = [];
+            const notAllowedIds = [];
+            allCheckboxes.forEach(cb => {
+                const id = parseInt(cb.dataset.id);
+                const alertType = cb.dataset.type;
+                if (isBatchAllowed(alertType)) {
+                    allowedIds.push(id);
+                } else {
+                    notAllowedIds.push({ id: id, reason: `"${alertType}"类型不支持批量处理` });
+                }
+            });
 
             const resultOptions = `
                 <option value="已跟进处理">已跟进处理</option>
@@ -1152,13 +1189,21 @@
                 <option value="其他">其他</option>
             `;
 
+            const notAllowedHtml = notAllowedIds.length > 0 ? `
+                <div style="background:#fff7e6;border:1px solid #ffe7ba;border-radius:6px;padding:10px 12px;margin-bottom:12px;">
+                    <p style="font-size:13px;color:#d46b08;margin-bottom:4px;">⚠️ 以下 ${notAllowedIds.length} 条提醒不支持批量处理，已自动排除：</p>
+                    <p style="font-size:12px;color:#8c8c8c;">${notAllowedIds.map(n => `ID:${n.id} - ${n.reason}`).join('；')}</p>
+                </div>
+            ` : '';
+
             const html = `
                 <div style="display:flex;flex-direction:column;gap:16px;">
                     <div class="card" style="margin-bottom:0;">
                         <div class="card-header" style="margin-bottom:8px;padding:0;">
                             <h3 style="font-size:14px;">批量处理提醒</h3>
                         </div>
-                        <p style="font-size:13px;color:#595959;margin-bottom:16px;">已选择 ${ids.length} 条待处理提醒</p>
+                        ${notAllowedHtml}
+                        <p style="font-size:13px;color:#595959;margin-bottom:16px;">共选择 ${allIds.length} 条，允许批量处理 ${allowedIds.length} 条</p>
                         <div class="form-row">
                             <div class="form-item">
                                 <label>处理人姓名 *</label>
@@ -1179,11 +1224,13 @@
                     <div id="batch-handle-status"></div>
                     <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0f0f0;">
                         <button class="btn btn-default" onclick="closeModal()">取消</button>
-                        <button class="btn btn-success" id="batch-handle-btn" onclick="submitBatchHandle()">提交处理</button>
+                        <button class="btn btn-success" id="batch-handle-btn" onclick="submitBatchHandle()" ${allowedIds.length === 0 ? 'disabled' : ''}>提交处理</button>
                     </div>
                 </div>
             `;
 
+            window._batchAllowedIds = allowedIds;
+            window._batchNotAllowedIds = notAllowedIds;
             showModal('批量处理', html);
         }
 
@@ -1272,9 +1319,10 @@
         }
 
         async function submitBatchHandle() {
-            const ids = getSelectedAlertIds();
-            if (ids.length === 0) {
-                alert('请先选择要处理的提醒');
+            const allowedIds = window._batchAllowedIds || [];
+            const notAllowedIds = window._batchNotAllowedIds || [];
+            if (allowedIds.length === 0) {
+                alert('没有可批量处理的提醒');
                 return;
             }
 
@@ -1299,18 +1347,38 @@
                 statusDiv.innerHTML = '<div class="empty" style="padding:20px;"><div class="empty-icon">⏳</div>正在处理，请稍候...</div>';
 
                 const result = await apiCall('/alerts/batch-handle', 'POST', {
-                    alert_ids: ids,
+                    alert_ids: allowedIds,
                     handled_by: handledBy,
                     handled_note: handledNote,
                     disposal_result: disposalResult
                 });
 
+                const skippedIds = result.skipped_ids || [];
+                const skippedCount = typeof result.skipped === 'number' ? result.skipped : skippedIds.length;
+                const notAllowedCount = notAllowedIds.length;
+
+                let skippedDetail = '';
+                if (skippedIds.length > 0) {
+                    skippedDetail = `<p style="font-size:12px;color:#8c8c8c;margin-top:4px;">跳过明细: ${skippedIds.map(s => `ID:${s.id}${s.reason ? ' - ' + s.reason : ''}`).join('；')}</p>`;
+                }
+
+                let notAllowedDetail = '';
+                if (notAllowedCount > 0) {
+                    notAllowedDetail = `<p style="font-size:12px;color:#8c8c8c;margin-top:4px;">不允许明细: ${notAllowedIds.map(n => `ID:${n.id} - ${n.reason}`).join('；')}</p>`;
+                }
+
                 statusDiv.innerHTML = `
                     <div class="card" style="background:#f6ffed;border:1px solid #b7eb8f;margin-bottom:0;">
                         <p style="font-size:13px;color:#389e0d;">
-                            ✅ 批量处理完成！成功处理 ${result.processed} 条，跳过 ${result.skipped} 条
+                            ✅ 批量处理完成！
                         </p>
-                        ${result.skipped > 0 ? `<p style="font-size:12px;color:#8c8c8c;margin-top:4px;">跳过的ID: ${result.skipped_ids.join(', ')}</p>` : ''}
+                        <div style="margin-top:8px;font-size:13px;">
+                            <p style="color:#389e0d;">✅ 处理成功: ${result.processed} 条</p>
+                            <p style="color:#fa8c16;">⚠️ 跳过: ${skippedCount} 条</p>
+                            <p style="color:#ff4d4f;">🚫 不允许: ${notAllowedCount} 条</p>
+                        </div>
+                        ${skippedDetail}
+                        ${notAllowedDetail}
                     </div>
                 `;
 
@@ -1321,7 +1389,7 @@
                     updateSelectedCount();
                     if (currentPage === 'dashboard') loadDashboard();
                     else if (currentPage === 'alerts') loadAlerts();
-                }, 1500);
+                }, 2000);
             } catch (e) {
                 const statusDiv = document.getElementById('batch-handle-status');
                 statusDiv.innerHTML = `
@@ -1399,6 +1467,7 @@
 
         function renderRespTable(data, dimensionLabel) {
             const container = document.getElementById('resp-table-container');
+            const dimensionKey = { '客户': 'customer', '线路': 'route', '箱号': 'box', '异常类型': 'type' }[dimensionLabel] || dimensionLabel;
 
             if (data.length === 0) {
                 container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>暂无数据</div>';
@@ -1413,6 +1482,7 @@
                             <th>待处理数量</th>
                             <th>平均处理时长(分钟)</th>
                             <th>最近异常箱号</th>
+                            <th>操作</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1424,11 +1494,127 @@
                                 <td>
                                     ${item.latest_box_no ? `<a href="javascript:viewBoxTimeline('${item.latest_box_no}')" style="color:#1890ff;text-decoration:none;">📦 ${item.latest_box_no}</a>` : '-'}
                                 </td>
+                                <td>
+                                    <button class="btn btn-link btn-sm" onclick="showDrillDown('${dimensionKey}', '${item.dimension_value}')">查看明细</button>
+                                </td>
                             </tr>
                         `).join('')}
                     </tbody>
                 </table>
             `;
+        }
+
+        async function showDrillDown(dimension, dimensionValue) {
+            const dimensionLabel = { 'customer': '客户', 'route': '线路', 'box': '箱号', 'type': '异常类型' }[dimension] || dimension;
+            const html = `
+                <div style="display:flex;flex-direction:column;gap:16px;">
+                    <div id="drill-down-content">
+                        <div class="empty"><div class="empty-icon">⏳</div>加载中...</div>
+                    </div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0f0f0;">
+                        <button class="btn btn-default" onclick="closeModal()">关闭</button>
+                    </div>
+                </div>
+            `;
+            showModal(`${dimensionLabel} - ${dimensionValue} - 未处理提醒明细`, html);
+
+            try {
+                const data = await apiCall(`/alerts/dashboard/drill-down?dimension=${dimension}&dimension_value=${encodeURIComponent(dimensionValue)}`);
+                const alerts = data.alerts || [];
+                const contentDiv = document.getElementById('drill-down-content');
+
+                if (alerts.length === 0) {
+                    contentDiv.innerHTML = '<div class="empty"><div class="empty-icon">📋</div>暂无明细数据</div>';
+                } else {
+                    contentDiv.innerHTML = `
+                        <table style="width:100%;">
+                            <thead>
+                                <tr>
+                                    <th>提醒编号</th>
+                                    <th>箱号</th>
+                                    <th>异常类型</th>
+                                    <th>严重程度</th>
+                                    <th>当前归属</th>
+                                    <th>创建时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${alerts.map(a => `
+                                    <tr>
+                                        <td style="font-size:12px;color:#595959;">${a.alert_no}</td>
+                                        <td><a href="javascript:closeModal();viewBoxTimeline('${a.box_no}')" style="color:#1890ff;text-decoration:none;">${a.box_no}</a></td>
+                                        <td>${a.alert_type}</td>
+                                        <td>${getSeverityTag(a.severity)}</td>
+                                        <td>${a.current_owner_role ? getRoleTag(a.current_owner_role) : '-'}</td>
+                                        <td style="color:#8c8c8c;font-size:12px;">${formatTime(a.created_at)}</td>
+                                        <td>
+                                            <button class="btn btn-primary btn-sm" onclick="closeModal();setTimeout(()=>showDisposalModal(${a.id}),200)">处置</button>
+                                            <button class="btn btn-link btn-sm" onclick="closeModal();viewBoxTimeline('${a.box_no}')">时间线</button>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                }
+            } catch (e) {
+                document.getElementById('drill-down-content').innerHTML = `<div class="empty"><div class="empty-icon">❌</div>加载失败: ${e.message}</div>`;
+            }
+        }
+
+        function showExportModal() {
+            const today = new Date().toISOString().split('T')[0];
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+            const html = `
+                <div style="display:flex;flex-direction:column;gap:16px;">
+                    <div class="form-row">
+                        <div class="form-item">
+                            <label>开始日期</label>
+                            <input type="date" id="export-start-date" value="${thirtyDaysAgo}">
+                        </div>
+                        <div class="form-item">
+                            <label>结束日期</label>
+                            <input type="date" id="export-end-date" value="${today}">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-item">
+                            <label>异常类型筛选</label>
+                            <select id="export-alert-type">
+                                <option value="">全部</option>
+                                <option value="超期未回">超期未回</option>
+                                <option value="温控异常">温控异常</option>
+                                <option value="客户投诉">客户投诉</option>
+                                <option value="同箱重复出库">同箱重复出库</option>
+                                <option value="客户高占用">客户高占用</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="export-status"></div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0f0f0;">
+                        <button class="btn btn-default" onclick="closeModal()">取消</button>
+                        <button class="btn btn-primary" onclick="doExport()">确认导出</button>
+                    </div>
+                </div>
+            `;
+            showModal('导出复盘', html);
+        }
+
+        function doExport() {
+            const startDate = document.getElementById('export-start-date').value;
+            const endDate = document.getElementById('export-end-date').value;
+            const alertType = document.getElementById('export-alert-type').value;
+
+            if (!startDate || !endDate) {
+                alert('请选择日期范围');
+                return;
+            }
+
+            let url = `${API_BASE}/alerts/export?start_date=${startDate}&end_date=${endDate}`;
+            if (alertType) url += `&alert_type=${encodeURIComponent(alertType)}`;
+            window.open(url, '_blank');
+            closeModal();
         }
 
         loadDashboard();
