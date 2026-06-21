@@ -7,28 +7,32 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #333; }
-        .header { background: #1890ff; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .header { background: linear-gradient(135deg, #1890ff, #096dd9); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
         .header h1 { font-size: 20px; }
         .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        .nav { background: white; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .nav { background: white; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); flex-wrap: wrap; }
         .nav-btn { padding: 8px 20px; border: none; background: #f5f5f5; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
-        .nav-btn:hover { background: #e6f7ff; }
+        .nav-btn:hover { background: #e6f7ff; color: #1890ff; }
         .nav-btn.active { background: #1890ff; color: white; }
         .page { display: none; }
         .page.active { display: block; }
         .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .card h2 { font-size: 16px; margin-bottom: 16px; color: #262626; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; }
-        .stat-card.blue { background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%); }
-        .stat-card.green { background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%); }
-        .stat-card.orange { background: linear-gradient(135deg, #fa8c16 0%, #d46b08 100%); }
-        .stat-card.red { background: linear-gradient(135deg, #ff4d4f 0%, #cf1322 100%); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .card-header h2 { font-size: 16px; color: #262626; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+        .stat-card { color: white; padding: 20px; border-radius: 8px; position: relative; overflow: hidden; }
+        .stat-card::after { content: ''; position: absolute; right: -20px; top: -20px; width: 100px; height: 100px; background: rgba(255,255,255,0.1); border-radius: 50%; }
+        .stat-card.blue { background: linear-gradient(135deg, #1890ff, #096dd9); }
+        .stat-card.green { background: linear-gradient(135deg, #52c41a, #389e0d); }
+        .stat-card.orange { background: linear-gradient(135deg, #fa8c16, #d46b08); }
+        .stat-card.red { background: linear-gradient(135deg, #ff4d4f, #cf1322); }
+        .stat-card.purple { background: linear-gradient(135deg, #722ed1, #531dab); }
+        .stat-card.cyan { background: linear-gradient(135deg, #13c2c2, #08979c); }
         .stat-value { font-size: 32px; font-weight: bold; margin-bottom: 4px; }
-        .stat-label { font-size: 14px; opacity: 0.9; }
+        .stat-label { font-size: 14px; opacity: 0.95; }
         table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f0f0f0; }
-        th { background: #fafafa; font-weight: 500; color: #595959; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+        th { background: #fafafa; font-weight: 500; color: #595959; white-space: nowrap; }
         tr:hover { background: #fafafa; }
         .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
         .tag-warning { background: #fff7e6; color: #fa8c16; }
@@ -36,27 +40,77 @@
         .tag-success { background: #f6ffed; color: #52c41a; }
         .tag-info { background: #e6f7ff; color: #1890ff; }
         .tag-default { background: #f5f5f5; color: #595959; }
-        .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .tag-purple { background: #f9f0ff; color: #722ed1; }
+        .btn { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
         .btn-primary { background: #1890ff; color: white; }
         .btn-primary:hover { background: #40a9ff; }
         .btn-success { background: #52c41a; color: white; }
+        .btn-success:hover { background: #73d13d; }
         .btn-danger { background: #ff4d4f; color: white; }
+        .btn-danger:hover { background: #ff7875; }
         .btn-default { background: #f5f5f5; color: #333; }
         .btn-default:hover { background: #e8e8e8; }
-        .form-row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
-        .form-item { flex: 1; min-width: 200px; }
+        .btn-link { background: none; color: #1890ff; padding: 4px 8px; }
+        .btn-link:hover { color: #40a9ff; text-decoration: underline; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .form-row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; align-items: flex-end; }
+        .form-item { flex: 1; min-width: 180px; }
         .form-item label { display: block; margin-bottom: 6px; font-size: 14px; color: #595959; }
-        .form-item input, .form-item select { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; }
-        .form-item input:focus, .form-item select:focus { outline: none; border-color: #1890ff; }
-        .alert-item { border: 1px solid #f0f0f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+        .form-item input, .form-item select, .form-item textarea { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px; font-family: inherit; }
+        .form-item input:focus, .form-item select:focus, .form-item textarea:focus { outline: none; border-color: #1890ff; box-shadow: 0 0 0 2px rgba(24,144,255,0.1); }
+        .alert-item { border: 1px solid #f0f0f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; transition: all 0.2s; }
+        .alert-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
         .alert-item.unhandled { border-left: 4px solid #ff4d4f; }
-        .alert-item.handled { border-left: 4px solid #52c41a; opacity: 0.7; }
-        .alert-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
-        .alert-title { font-weight: 500; font-size: 15px; }
-        .alert-content { color: #595959; font-size: 13px; line-height: 1.6; white-space: pre-line; }
-        .alert-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+        .alert-item.handled { border-left: 4px solid #52c41a; opacity: 0.8; }
+        .alert-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; gap: 12px; flex-wrap: wrap; }
+        .alert-title-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .alert-title { font-weight: 600; font-size: 15px; color: #262626; }
+        .alert-content { color: #595959; font-size: 13px; line-height: 1.7; white-space: pre-line; background: #fafafa; padding: 10px; border-radius: 6px; margin-top: 8px; }
+        .alert-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; flex-wrap: wrap; gap: 8px; }
         .alert-time { color: #8c8c8c; font-size: 12px; }
+        .alert-actions { display: flex; gap: 8px; }
         .empty { text-align: center; padding: 40px; color: #8c8c8c; }
+        .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.4; }
+
+        .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; padding: 20px; }
+        .modal { background: white; border-radius: 10px; max-width: 900px; width: 100%; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; }
+        .modal-header { padding: 16px 20px; border-bottom: 1px solid #f0f0f0; display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { font-size: 16px; }
+        .modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: #8c8c8c; padding: 4px 8px; }
+        .modal-close:hover { color: #333; }
+        .modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+
+        .timeline { position: relative; padding-left: 28px; }
+        .timeline::before { content: ''; position: absolute; left: 10px; top: 6px; bottom: 6px; width: 2px; background: #e8e8e8; }
+        .timeline-item { position: relative; padding-bottom: 20px; }
+        .timeline-item:last-child { padding-bottom: 0; }
+        .timeline-dot { position: absolute; left: -28px; top: 2px; width: 22px; height: 22px; border-radius: 50%; background: white; border: 3px solid #1890ff; display: flex; align-items: center; justify-content: center; font-size: 11px; }
+        .timeline-item.danger .timeline-dot { border-color: #ff4d4f; }
+        .timeline-item.warning .timeline-dot { border-color: #fa8c16; }
+        .timeline-item.success .timeline-dot { border-color: #52c41a; }
+        .timeline-item.info .timeline-dot { border-color: #1890ff; }
+        .timeline-time { font-size: 12px; color: #8c8c8c; margin-bottom: 4px; }
+        .timeline-title { font-size: 14px; font-weight: 600; color: #262626; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .timeline-desc { font-size: 13px; color: #595959; line-height: 1.6; background: #fafafa; padding: 8px 12px; border-radius: 6px; }
+
+        .push-table { margin-top: 8px; }
+        .push-table th, .push-table td { padding: 8px; font-size: 12px; }
+        .channel-badge { display: inline-block; padding: 2px 6px; border-radius: 3px; font-size: 11px; background: #e6f7ff; color: #1890ff; }
+        .channel-badge.sms { background: #fff7e6; color: #fa8c16; }
+        .channel-badge.email { background: #f9f0ff; color: #722ed1; }
+
+        .duplicate-indicator { background: #fff1f0; border: 1px dashed #ff4d4f; color: #ff4d4f; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+
+        .box-info-bar { background: #f0f5ff; border: 1px solid #d6e4ff; border-radius: 8px; padding: 16px; margin-bottom: 16px; display: flex; gap: 24px; flex-wrap: wrap; }
+        .box-info-item { display: flex; flex-direction: column; gap: 4px; }
+        .box-info-label { font-size: 12px; color: #8c8c8c; }
+        .box-info-value { font-size: 15px; font-weight: 600; color: #262626; }
+        .next-action-bar { background: #fff7e6; border: 1px solid #ffe7ba; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+        .next-action-label { font-weight: 600; color: #d46b08; white-space: nowrap; }
+        .next-action-text { color: #595959; font-size: 13px; }
+
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -67,58 +121,50 @@
 
     <div class="container">
         <div class="nav">
-            <button class="nav-btn active" onclick="showPage('dashboard')">仪表盘</button>
-            <button class="nav-btn" onclick="showPage('alerts')">提醒中心</button>
-            <button class="nav-btn" onclick="showPage('boxes')">箱体管理</button>
-            <button class="nav-btn" onclick="showPage('tasks')">周转任务</button>
-            <button class="nav-btn" onclick="showPage('config')">系统配置</button>
+            <button class="nav-btn active" onclick="showPage('dashboard', event)">仪表盘</button>
+            <button class="nav-btn" onclick="showPage('alerts', event)">提醒中心</button>
+            <button class="nav-btn" onclick="showPage('boxes', event)">箱体管理</button>
+            <button class="nav-btn" onclick="showPage('timeline', event)">🔍 箱体时间线</button>
+            <button class="nav-btn" onclick="showPage('tasks', event)">周转任务</button>
+            <button class="nav-btn" onclick="showPage('config', event)">系统配置</button>
         </div>
 
         <div id="page-dashboard" class="page active">
             <div class="stats-grid">
-                <div class="stat-card blue">
-                    <div class="stat-value" id="stat-total">--</div>
-                    <div class="stat-label">箱体总数</div>
-                </div>
-                <div class="stat-card green">
-                    <div class="stat-value" id="stat-idle">--</div>
-                    <div class="stat-label">空闲箱体</div>
-                </div>
-                <div class="stat-card orange">
-                    <div class="stat-value" id="stat-inuse">--</div>
-                    <div class="stat-label">使用中</div>
-                </div>
-                <div class="stat-card red">
-                    <div class="stat-value" id="stat-overdue">--</div>
-                    <div class="stat-label">超期未回</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="stat-tasks">--</div>
-                    <div class="stat-label">在途任务</div>
-                </div>
-                <div class="stat-card red">
-                    <div class="stat-value" id="stat-alerts">--</div>
-                    <div class="stat-label">待处理提醒</div>
-                </div>
+                <div class="stat-card blue"><div class="stat-value" id="stat-total">--</div><div class="stat-label">箱体总数</div></div>
+                <div class="stat-card green"><div class="stat-value" id="stat-idle">--</div><div class="stat-label">空闲箱体</div></div>
+                <div class="stat-card orange"><div class="stat-value" id="stat-inuse">--</div><div class="stat-label">使用中</div></div>
+                <div class="stat-card red"><div class="stat-value" id="stat-overdue">--</div><div class="stat-label">超期未回</div></div>
+                <div class="stat-card red"><div class="stat-value" id="stat-temperr">--</div><div class="stat-label">温控异常</div></div>
+                <div class="stat-card purple"><div class="stat-value" id="stat-tasks">--</div><div class="stat-label">在途任务</div></div>
+                <div class="stat-card cyan"><div class="stat-value" id="stat-dup">--</div><div class="stat-label">重复出库</div></div>
+                <div class="stat-card red"><div class="stat-value" id="stat-alerts">--</div><div class="stat-label">待处理提醒</div></div>
             </div>
 
             <div class="card" style="margin-top: 20px;">
-                <h2>快捷操作</h2>
+                <div class="card-header">
+                    <h2>快捷操作</h2>
+                </div>
                 <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-                    <button class="btn btn-primary" onclick="runCheck()">立即执行规则检查</button>
-                    <button class="btn btn-default" onclick="loadDashboard()">刷新数据</button>
+                    <button class="btn btn-primary" onclick="runCheck()">🔍 立即执行规则检查</button>
+                    <button class="btn btn-default" onclick="loadDashboard()">🔄 刷新数据</button>
                 </div>
             </div>
 
             <div class="card">
-                <h2>最新提醒</h2>
+                <div class="card-header">
+                    <h2>🔔 最新提醒</h2>
+                    <button class="btn btn-link btn-sm" onclick="showPage('alerts', event)">查看全部 →</button>
+                </div>
                 <div id="latest-alerts"></div>
             </div>
         </div>
 
         <div id="page-alerts" class="page">
             <div class="card">
-                <h2>提醒中心</h2>
+                <div class="card-header">
+                    <h2>🔔 提醒中心</h2>
+                </div>
                 <div class="form-row">
                     <div class="form-item" style="min-width: 150px; flex: none;">
                         <label>状态筛选</label>
@@ -145,7 +191,9 @@
 
         <div id="page-boxes" class="page">
             <div class="card">
-                <h2>箱体管理</h2>
+                <div class="card-header">
+                    <h2>📦 箱体管理</h2>
+                </div>
                 <div class="form-row">
                     <div class="form-item" style="min-width: 150px; flex: none;">
                         <label>状态筛选</label>
@@ -155,8 +203,9 @@
                             <option value="outbound">出库</option>
                             <option value="in_transit">运输中</option>
                             <option value="signed">已签收</option>
-                            <option value="overdue">超期</option>
-                            <option value="temp_abnormal">温控异常</option>
+                            <option value="overdue">超期未回</option>
+                            <option value="temp_abnormal">🔴 温控异常</option>
+                            <option value="returned">已回仓</option>
                         </select>
                     </div>
                 </div>
@@ -176,9 +225,30 @@
             </div>
         </div>
 
+        <div id="page-timeline" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h2>🔍 箱体全链路时间线</h2>
+                </div>
+                <div class="form-row">
+                    <div class="form-item" style="flex: 2;">
+                        <label>输入箱号查看全链路时间线</label>
+                        <input type="text" id="timeline-boxno" placeholder="例如：BOX-TEST-001">
+                    </div>
+                    <div class="form-item" style="flex: none; min-width: auto;">
+                        <label>&nbsp;</label>
+                        <button class="btn btn-primary" onclick="loadTimeline()">查询时间线</button>
+                    </div>
+                </div>
+            </div>
+            <div id="timeline-content"></div>
+        </div>
+
         <div id="page-tasks" class="page">
             <div class="card">
-                <h2>周转任务</h2>
+                <div class="card-header">
+                    <h2>📋 周转任务</h2>
+                </div>
                 <div class="form-row">
                     <div class="form-item" style="min-width: 150px; flex: none;">
                         <label>状态筛选</label>
@@ -187,7 +257,16 @@
                             <option value="outbound">出库</option>
                             <option value="in_transit">运输中</option>
                             <option value="signed">已签收</option>
+                            <option value="temp_abnormal">温控异常</option>
+                            <option value="overdue">超期</option>
                             <option value="returned">已回仓</option>
+                        </select>
+                    </div>
+                    <div class="form-item" style="min-width: 150px; flex: none;">
+                        <label>特殊标记</label>
+                        <select id="task-dup" onchange="loadTasks()">
+                            <option value="">全部</option>
+                            <option value="duplicate">⚠️ 重复出库</option>
                         </select>
                     </div>
                 </div>
@@ -200,7 +279,8 @@
                             <th>线路</th>
                             <th>预计归还</th>
                             <th>状态</th>
-                            <th>是否超期</th>
+                            <th>超期</th>
+                            <th>标记</th>
                             <th>创建时间</th>
                         </tr>
                     </thead>
@@ -211,15 +291,10 @@
 
         <div id="page-config" class="page">
             <div class="card">
-                <h2>系统参数配置</h2>
+                <div class="card-header"><h2>⚙️ 系统参数配置</h2></div>
                 <table>
                     <thead>
-                        <tr>
-                            <th>配置项</th>
-                            <th>配置值</th>
-                            <th>说明</th>
-                            <th>操作</th>
-                        </tr>
+                        <tr><th>配置项</th><th>配置值</th><th>说明</th><th>操作</th></tr>
                     </thead>
                     <tbody id="config-table"></tbody>
                 </table>
@@ -229,15 +304,10 @@
             </div>
 
             <div class="card">
-                <h2>客户周转周期配置</h2>
+                <div class="card-header"><h2>🏢 客户周转周期配置</h2></div>
                 <table>
                     <thead>
-                        <tr>
-                            <th>客户名称</th>
-                            <th>周转天数</th>
-                            <th>说明</th>
-                            <th>操作</th>
-                        </tr>
+                        <tr><th>客户名称</th><th>周转天数</th><th>说明</th><th>操作</th></tr>
                     </thead>
                     <tbody id="customer-config-table"></tbody>
                 </table>
@@ -247,18 +317,10 @@
             </div>
 
             <div class="card">
-                <h2>提醒接收人配置</h2>
+                <div class="card-header"><h2>👥 提醒接收人配置</h2></div>
                 <table>
                     <thead>
-                        <tr>
-                            <th>姓名</th>
-                            <th>角色</th>
-                            <th>电话</th>
-                            <th>邮箱</th>
-                            <th>接收提醒类型</th>
-                            <th>状态</th>
-                            <th>操作</th>
-                        </tr>
+                        <tr><th>姓名</th><th>角色</th><th>电话</th><th>邮箱</th><th>接收类型</th><th>状态</th><th>操作</th></tr>
                     </thead>
                     <tbody id="recipient-table"></tbody>
                 </table>
@@ -269,32 +331,45 @@
         </div>
     </div>
 
+    <div id="modal-root"></div>
+
     <script>
         const API_BASE = '/api';
+        let currentPage = 'dashboard';
 
-        function showPage(page) {
+        function showPage(page, evt) {
+            currentPage = page;
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
             document.getElementById('page-' + page).classList.add('active');
-            event.target.classList.add('active');
+            if (evt && evt.target) evt.target.classList.add('active');
+            else {
+                const btns = document.querySelectorAll('.nav-btn');
+                btns.forEach(b => { if (b.textContent.includes(pageName(page)) || b.getAttribute('onclick')?.includes(`'${page}'`)) b.classList.add('active'); });
+            }
 
             if (page === 'dashboard') loadDashboard();
             else if (page === 'alerts') loadAlerts();
             else if (page === 'boxes') loadBoxes();
             else if (page === 'tasks') loadTasks();
             else if (page === 'config') { loadConfigs(); loadCustomerConfigs(); loadRecipients(); }
+            else if (page === 'timeline') { const q = document.getElementById('timeline-boxno').value; if (q) loadTimeline(); }
         }
+
+        function pageName(p) { return ''; }
 
         async function apiCall(url, method = 'GET', data = null) {
             const options = { method, headers: { 'Content-Type': 'application/json' } };
             if (data) options.body = JSON.stringify(data);
             const res = await fetch(API_BASE + url, options);
+            if (!res.ok) { try { const e = await res.json(); throw new Error(e.detail || e.message || '请求失败'); } catch { throw new Error('请求失败: ' + res.status); } }
             return await res.json();
         }
 
         function formatTime(str) {
             if (!str) return '-';
-            return new Date(str).toLocaleString('zh-CN');
+            const d = new Date(str);
+            return d.toLocaleString('zh-CN', { hour12: false });
         }
 
         function getStatusTag(status) {
@@ -304,8 +379,8 @@
                 'in_transit': ['运输中', 'tag-info'],
                 'signed': ['已签收', 'tag-warning'],
                 'returned': ['已回仓', 'tag-default'],
-                'overdue': ['超期', 'tag-danger'],
-                'temp_abnormal': ['温控异常', 'tag-danger']
+                'overdue': ['超期未回', 'tag-danger'],
+                'temp_abnormal': ['🔴 温控异常', 'tag-danger']
             };
             const [text, cls] = map[status] || [status, 'tag-default'];
             return `<span class="tag ${cls}">${text}</span>`;
@@ -315,47 +390,80 @@
             const map = {
                 'low': ['低', 'tag-info'],
                 'warning': ['警告', 'tag-warning'],
-                'high': ['严重', 'tag-danger']
+                'high': ['🔴 严重', 'tag-danger']
             };
             const [text, cls] = map[severity] || [severity, 'tag-default'];
             return `<span class="tag ${cls}">${text}</span>`;
         }
 
-        async function loadDashboard() {
-            const data = await apiCall('/admin/dashboard');
-            document.getElementById('stat-total').textContent = data.total_boxes;
-            document.getElementById('stat-idle').textContent = data.idle_boxes;
-            document.getElementById('stat-inuse').textContent = data.in_use_boxes;
-            document.getElementById('stat-overdue').textContent = data.overdue_boxes;
-            document.getElementById('stat-tasks').textContent = data.active_tasks;
-            document.getElementById('stat-alerts').textContent = data.unhandled_alerts;
-
-            const alerts = await apiCall('/alerts?is_handled=false');
-            const container = document.getElementById('latest-alerts');
-            if (alerts.length === 0) {
-                container.innerHTML = '<div class="empty">暂无待处理提醒</div>';
-            } else {
-                container.innerHTML = alerts.slice(0, 5).map(a => renderAlertItem(a)).join('');
-            }
+        function getRoleTag(role) {
+            const map = {
+                'dispatch': ['调度', 'tag-info'],
+                'warehouse': ['仓库', 'tag-purple'],
+                'customer_service': ['客服', 'tag-warning'],
+                'manager': ['管理', 'tag-danger']
+            };
+            const [text, cls] = map[role] || [role, 'tag-default'];
+            return `<span class="tag ${cls}">${text}</span>`;
         }
 
-        function renderAlertItem(alert) {
+        function getChannelTag(channel) {
+            const map = {
+                'sms': ['短信', 'channel-badge sms'],
+                'email': ['邮件', 'channel-badge email'],
+                'system': ['系统内', 'channel-badge']
+            };
+            const [text, cls] = map[channel] || [channel, 'channel-badge'];
+            return `<span class="${cls}">${text}</span>`;
+        }
+
+        async function loadDashboard() {
+            try {
+                const data = await apiCall('/admin/dashboard');
+                document.getElementById('stat-total').textContent = data.total_boxes;
+                document.getElementById('stat-idle').textContent = data.idle_boxes;
+                document.getElementById('stat-inuse').textContent = data.in_use_boxes;
+                document.getElementById('stat-overdue').textContent = data.overdue_boxes;
+                document.getElementById('stat-tasks').textContent = data.active_tasks;
+                document.getElementById('stat-alerts').textContent = data.unhandled_alerts;
+
+                const boxes = await apiCall('/admin/boxes');
+                const tempErr = boxes.filter(b => b.status === 'temp_abnormal').length;
+                const tasks = await apiCall('/admin/tasks');
+                const dups = tasks.filter(t => t.is_duplicate).length;
+                document.getElementById('stat-temperr').textContent = tempErr;
+                document.getElementById('stat-dup').textContent = dups;
+
+                const alerts = await apiCall('/alerts?is_handled=false');
+                const container = document.getElementById('latest-alerts');
+                if (alerts.length === 0) {
+                    container.innerHTML = '<div class="empty"><div class="empty-icon">✅</div>暂无待处理提醒</div>';
+                } else {
+                    container.innerHTML = alerts.slice(0, 5).map(a => renderAlertCard(a, true)).join('');
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function renderAlertCard(alert, compact = false) {
             const cls = alert.is_handled ? 'handled' : 'unhandled';
             return `
                 <div class="alert-item ${cls}">
                     <div class="alert-header">
-                        <div>
+                        <div class="alert-title-wrap">
                             <span class="alert-title">${alert.alert_type}</span>
                             ${getSeverityTag(alert.severity)}
-                            ${alert.box_no ? `<span class="tag tag-info" style="margin-left: 8px;">${alert.box_no}</span>` : ''}
+                            ${alert.box_no ? `<span class="tag tag-info" onclick="viewBoxTimeline('${alert.box_no}')" style="cursor:pointer;" title="查看时间线">📦 ${alert.box_no}</span>` : ''}
+                            <span class="tag tag-default">责任: ${alert.responsible_node}</span>
+                            ${alert.last_pushed_at ? `<span class="tag tag-success">📡 ${formatTime(alert.last_pushed_at)}</span>` : ''}
                         </div>
-                        <span class="tag tag-default">责任: ${alert.responsible_node}</span>
+                        <button class="btn btn-link btn-sm" onclick="showAlertDetail(${alert.id})">详情 →</button>
                     </div>
-                    <div class="alert-content">${alert.content}</div>
+                    ${!compact ? `<div class="alert-content">${alert.content}</div>` : `<div class="alert-content" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${alert.content}</div>`}
                     <div class="alert-footer">
-                        <span class="alert-time">${formatTime(alert.created_at)}</span>
-                        <div>
-                            ${!alert.is_handled ? `<button class="btn btn-success" onclick="handleAlert(${alert.id})">标记处理</button>` : ''}
+                        <span class="alert-time">创建: ${formatTime(alert.created_at)}</span>
+                        <div class="alert-actions">
+                            <button class="btn btn-default btn-sm" onclick="showAlertDetail(${alert.id})">推送记录</button>
+                            ${!alert.is_handled ? `<button class="btn btn-success btn-sm" onclick="handleAlert(${alert.id})">标记处理</button>` : ''}
                         </div>
                     </div>
                 </div>
@@ -370,109 +478,300 @@
             else if (filter === 'handled') url += 'is_handled=true&';
             if (role) url += `role=${role}&`;
 
-            const alerts = await apiCall(url.replace(/&$/, ''));
-            const container = document.getElementById('alerts-list');
-            if (alerts.length === 0) {
-                container.innerHTML = '<div class="empty">暂无提醒数据</div>';
-            } else {
-                container.innerHTML = alerts.map(a => renderAlertItem(a)).join('');
-            }
+            try {
+                const alerts = await apiCall(url.replace(/&$/, ''));
+                const container = document.getElementById('alerts-list');
+                if (alerts.length === 0) {
+                    container.innerHTML = '<div class="empty"><div class="empty-icon">🔔</div>暂无提醒数据</div>';
+                } else {
+                    container.innerHTML = alerts.map(a => renderAlertCard(a)).join('');
+                }
+            } catch (e) { alert('加载失败: ' + e.message); }
+        }
+
+        async function showAlertDetail(alertId) {
+            try {
+                const data = await apiCall(`/alerts/${alertId}`);
+                const a = data.alert;
+                const records = data.push_records || [];
+
+                const channelMap = { sms: '📱 短信', email: '📧 邮件', system: '💻 系统内' };
+                const roleMap = { dispatch: '调度', warehouse: '仓库', customer_service: '客服', manager: '管理' };
+
+                const pushRecordsHtml = records.length === 0 ? '<div class="empty" style="padding:20px;">暂无推送记录</div>' : `
+                    <table class="push-table" style="width:100%;">
+                        <thead>
+                            <tr><th>推送对象</th><th>角色</th><th>渠道</th><th>推送目标</th><th>状态</th><th>推送时间</th></tr>
+                        </thead>
+                        <tbody>
+                            ${records.map(r => `
+                                <tr>
+                                    <td><strong>${r.recipient_name}</strong></td>
+                                    <td>${getRoleTag(r.recipient_role)}</td>
+                                    <td>${getChannelTag(r.push_channel)}</td>
+                                    <td style="font-size:11px;color:#595959;">${r.push_target}</td>
+                                    <td>${r.status === 'success' ? '<span class="tag tag-success">成功</span>' : '<span class="tag tag-danger">失败</span>'}</td>
+                                    <td style="color:#8c8c8c;font-size:12px;">${formatTime(r.pushed_at)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                const html = `
+                    <div style="display:flex;flex-direction:column;gap:16px;">
+                        <div>
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                                <span style="font-size:18px;font-weight:600;">${a.alert_type}</span>
+                                ${getSeverityTag(a.severity)}
+                                ${a.box_no ? `<span class="tag tag-info" onclick="closeModal();viewBoxTimeline('${a.box_no}')" style="cursor:pointer;">📦 ${a.box_no}</span>` : ''}
+                                <span class="tag tag-default">责任节点: ${a.responsible_node}</span>
+                                ${a.is_handled ? '<span class="tag tag-success">已处理</span>' : (a.is_read ? '<span class="tag tag-warning">已读</span>' : '<span class="tag tag-danger">待处理</span>')}
+                            </div>
+                            <div class="alert-content">${a.content}</div>
+                        </div>
+
+                        <div>
+                            <h4 style="font-size:14px;margin-bottom:8px;color:#262626;">📡 推送记录（${records.length} 条）</h4>
+                            ${pushRecordsHtml}
+                        </div>
+
+                        <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0f0f0;">
+                            <button class="btn btn-default" onclick="repushAlert(${a.id})">🔄 重新推送</button>
+                            ${!a.is_handled ? `<button class="btn btn-success" onclick="handleAlert(${a.id});closeModal();">✅ 标记已处理</button>` : ''}
+                            <button class="btn btn-primary" onclick="closeModal()">关闭</button>
+                        </div>
+                    </div>
+                `;
+
+                showModal(`提醒详情 - ${a.alert_no}`, html);
+            } catch (e) { alert('加载失败: ' + e.message); }
+        }
+
+        async function repushAlert(alertId) {
+            try {
+                const r = await apiCall(`/alerts/${alertId}/push`, 'POST');
+                alert(`重新推送成功，推送给 ${r.pushed_to} 个接收人`);
+                showAlertDetail(alertId);
+            } catch (e) { alert('推送失败: ' + e.message); }
         }
 
         async function handleAlert(id) {
-            await apiCall(`/alerts/${id}/handle`, 'PUT');
-            loadAlerts();
-            loadDashboard();
+            try {
+                await apiCall(`/alerts/${id}/handle`, 'PUT');
+                if (currentPage === 'dashboard') loadDashboard();
+                else if (currentPage === 'alerts') loadAlerts();
+                else if (document.getElementById('alert-detail-root')) showAlertDetail(id);
+            } catch (e) { alert('操作失败: ' + e.message); }
         }
 
         async function runCheck() {
-            const result = await apiCall('/alerts/check/run', 'POST');
-            alert(`规则检查完成，新增 ${result.new_alerts} 条提醒`);
-            loadDashboard();
+            try {
+                const result = await apiCall('/alerts/check/run', 'POST');
+                alert(`规则检查完成，新增 ${result.new_alerts} 条提醒`);
+                loadDashboard();
+            } catch (e) { alert('执行失败: ' + e.message); }
         }
 
         async function loadBoxes() {
             const status = document.getElementById('box-status').value;
             let url = '/admin/boxes';
             if (status) url += `?status=${status}`;
-            const boxes = await apiCall(url);
-            const tbody = document.getElementById('boxes-table');
-            if (boxes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无数据</td></tr>';
-            } else {
-                tbody.innerHTML = boxes.map(b => `
-                    <tr>
-                        <td>${b.box_no}</td>
-                        <td>${getStatusTag(b.status)}</td>
-                        <td>${b.current_customer || '-'}</td>
-                        <td>${b.current_route || '-'}</td>
-                        <td>${formatTime(b.updated_at || b.created_at)}</td>
-                        <td><button class="btn btn-default" onclick="viewBoxDetail('${b.box_no}')">详情</button></td>
-                    </tr>
-                `).join('');
-            }
+            try {
+                const boxes = await apiCall(url);
+                const tbody = document.getElementById('boxes-table');
+                if (boxes.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无数据</td></tr>';
+                } else {
+                    tbody.innerHTML = boxes.map(b => `
+                        <tr>
+                            <td><strong><a href="javascript:viewBoxTimeline('${b.box_no}')" style="color:#1890ff;text-decoration:none;">${b.box_no}</a></strong></td>
+                            <td>${getStatusTag(b.status)}</td>
+                            <td>${b.current_customer || '-'}</td>
+                            <td>${b.current_route || '-'}</td>
+                            <td style="color:#8c8c8c;font-size:12px;">${formatTime(b.updated_at || b.created_at)}</td>
+                            <td>
+                                <button class="btn btn-link btn-sm" onclick="viewBoxTimeline('${b.box_no}')">🔍 时间线</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) { alert('加载失败: ' + e.message); }
         }
 
-        async function viewBoxDetail(boxNo) {
-            const records = await apiCall(`/turnover/handover/${boxNo}`);
-            const recordText = records.map(r => 
-                `${formatTime(r.recorded_at)} - ${r.record_type} - ${r.location || '-'} - ${r.operator || '-'}`
-            ).join('\n') || '暂无记录';
-            alert(`箱号: ${boxNo}\n\n交接记录:\n${recordText}`);
+        async function viewBoxTimeline(boxNo) {
+            document.getElementById('timeline-boxno').value = boxNo;
+            showPage('timeline', { target: { classList: { add() {}, remove() {} } } });
+            document.querySelectorAll('.nav-btn').forEach(b => {
+                b.classList.remove('active');
+                if (b.textContent.includes('时间线')) b.classList.add('active');
+            });
+            await loadTimeline();
+        }
+
+        async function loadTimeline() {
+            const boxNo = document.getElementById('timeline-boxno').value.trim();
+            const container = document.getElementById('timeline-content');
+            if (!boxNo) { container.innerHTML = '<div class="card"><div class="empty"><div class="empty-icon">🔍</div>请输入箱号进行查询</div></div>'; return; }
+
+            try {
+                const data = await apiCall(`/turnover/timeline/${encodeURIComponent(boxNo)}`);
+                const events = data.events || [];
+                const box = data.box;
+
+                const nextActionHtml = data.next_suggested_action ? `
+                    <div class="next-action-bar">
+                        <span class="next-action-label">💡 建议下一步动作:</span>
+                        <span class="next-action-text">${data.next_suggested_action}</span>
+                    </div>
+                ` : '';
+
+                const timelineHtml = events.length === 0 ? `
+                    <div class="card"><div class="empty"><div class="empty-icon">🕐</div>暂无事件记录</div></div>
+                ` : `
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>🕐 全链路事件时间线（${events.length} 条记录）</h2>
+                        </div>
+                        <div class="timeline">
+                            ${events.map(e => {
+                                const sev = e.severity || 'info';
+                                const clsMap = { danger: 'danger', warning: 'warning', success: 'success', info: 'info' };
+                                return `
+                                    <div class="timeline-item ${clsMap[sev] || 'info'}">
+                                        <div class="timeline-dot" title="${e.event_type}">${e.icon || '•'}</div>
+                                        <div class="timeline-time">${formatTime(e.event_time)}</div>
+                                        <div class="timeline-title">
+                                            ${e.title}
+                                            ${e.severity === 'danger' ? '<span class="tag tag-danger">异常</span>' : ''}
+                                            ${e.severity === 'warning' ? '<span class="tag tag-warning">注意</span>' : ''}
+                                        </div>
+                                        <div class="timeline-desc">${e.description || '-'}</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+
+                container.innerHTML = `
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>📦 箱体信息</h2>
+                            <button class="btn btn-default btn-sm" onclick="loadTimeline()">🔄 刷新</button>
+                        </div>
+                        <div class="box-info-bar">
+                            <div class="box-info-item">
+                                <span class="box-info-label">箱号</span>
+                                <span class="box-info-value">${box.box_no}</span>
+                            </div>
+                            <div class="box-info-item">
+                                <span class="box-info-label">当前状态</span>
+                                <span class="box-info-value">${getStatusTag(box.status)}</span>
+                            </div>
+                            <div class="box-info-item">
+                                <span class="box-info-label">当前客户</span>
+                                <span class="box-info-value">${box.current_customer || '-'}</span>
+                            </div>
+                            <div class="box-info-item">
+                                <span class="box-info-label">当前线路</span>
+                                <span class="box-info-value">${box.current_route || '-'}</span>
+                            </div>
+                        </div>
+                        ${nextActionHtml}
+                    </div>
+                    ${timelineHtml}
+                `;
+            } catch (e) {
+                container.innerHTML = `<div class="card"><div class="empty"><div class="empty-icon">❌</div>查询失败: ${e.message}</div></div>`;
+            }
         }
 
         async function loadTasks() {
             const status = document.getElementById('task-status').value;
+            const dup = document.getElementById('task-dup').value;
             let url = '/admin/tasks';
-            if (status) url += `?status=${status}`;
-            const tasks = await apiCall(url);
-            const tbody = document.getElementById('tasks-table');
-            if (tasks.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无数据</td></tr>';
-            } else {
-                tbody.innerHTML = tasks.map(t => `
-                    <tr>
-                        <td>${t.task_no}</td>
-                        <td>${t.box_no}</td>
-                        <td>${t.customer}</td>
-                        <td>${t.route}</td>
-                        <td>${formatTime(t.expected_return_date)}</td>
-                        <td>${getStatusTag(t.status)}</td>
-                        <td>${t.is_overdue ? '<span class="tag tag-danger">是</span>' : '<span class="tag tag-success">否</span>'}</td>
-                        <td>${formatTime(t.created_at)}</td>
-                    </tr>
-                `).join('');
-            }
+            const params = [];
+            if (status) params.push(`status=${status}`);
+            if (params.length) url += '?' + params.join('&');
+
+            try {
+                let tasks = await apiCall(url);
+                if (dup === 'duplicate') tasks = tasks.filter(t => t.is_duplicate);
+
+                const tbody = document.getElementById('tasks-table');
+                if (tasks.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="9" class="empty">暂无数据</td></tr>';
+                } else {
+                    tbody.innerHTML = tasks.map(t => `
+                        <tr>
+                            <td style="font-size:12px;color:#595959;">${t.task_no}</td>
+                            <td><strong><a href="javascript:viewBoxTimeline('${t.box_no}')" style="color:#1890ff;text-decoration:none;">${t.box_no}</a></strong></td>
+                            <td>${t.customer}</td>
+                            <td>${t.route}</td>
+                            <td style="font-size:12px;color:#595959;">${formatTime(t.expected_return_date)}</td>
+                            <td>${getStatusTag(t.status)}</td>
+                            <td>${t.is_overdue ? '<span class="tag tag-danger">是</span>' : '<span class="tag tag-success">否</span>'}</td>
+                            <td>${t.is_duplicate ? `<span class="duplicate-indicator">⚠️ 重复</span>` : '-'}</td>
+                            <td style="color:#8c8c8c;font-size:12px;">${formatTime(t.created_at)}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) { alert('加载失败: ' + e.message); }
+        }
+
+        function showModal(title, content) {
+            const html = `
+                <div class="modal-mask" onclick="if(event.target===this)closeModal()">
+                    <div class="modal">
+                        <div class="modal-header">
+                            <h3>${title}</h3>
+                            <button class="modal-close" onclick="closeModal()">×</button>
+                        </div>
+                        <div class="modal-body" id="modal-body">${content}</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modal-root').innerHTML = html;
+        }
+
+        function closeModal() {
+            document.getElementById('modal-root').innerHTML = '';
         }
 
         async function loadConfigs() {
-            const configs = await apiCall('/admin/configs');
-            const tbody = document.getElementById('config-table');
-            tbody.innerHTML = Object.entries(configs).map(([key, value]) => `
-                <tr>
-                    <td>${key}</td>
-                    <td><input type="text" value="${value}" id="config-val-${key}" style="width: 100px; padding: 4px 8px; border: 1px solid #d9d9d9; border-radius: 4px;"></td>
-                    <td>${value}</td>
-                    <td>
-                        <button class="btn btn-primary" onclick="saveConfig('${key}')">保存</button>
-                        <button class="btn btn-danger" onclick="deleteConfig('${key}')">删除</button>
-                    </td>
-                </tr>
-            `).join('');
+            try {
+                const configs = await apiCall('/admin/configs');
+                const tbody = document.getElementById('config-table');
+                tbody.innerHTML = Object.entries(configs).map(([key, value]) => `
+                    <tr>
+                        <td><strong>${key}</strong></td>
+                        <td><input type="text" value="${value}" id="config-val-${key.replace(/[^\w]/g,'_')}" style="width:120px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;"></td>
+                        <td style="color:#8c8c8c;font-size:12px;">${value}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="saveConfig('${key}')">保存</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteConfig('${key}')">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (e) { console.error(e); }
         }
 
         async function saveConfig(key) {
-            const value = document.getElementById('config-val-' + key).value;
-            await apiCall('/admin/configs', 'POST', { config_key: key, config_value: value });
-            alert('保存成功');
-            loadConfigs();
+            const value = document.getElementById('config-val-' + key.replace(/[^\w]/g,'_')).value;
+            try {
+                await apiCall('/admin/configs', 'POST', { config_key: key, config_value: value });
+                alert('保存成功');
+                loadConfigs();
+            } catch (e) { alert('操作失败: ' + e.message); }
         }
 
         async function deleteConfig(key) {
-            if (confirm('确定删除此配置？')) {
+            if (!confirm('确定删除此配置？')) return;
+            try {
                 await apiCall('/admin/configs/' + key, 'DELETE');
                 loadConfigs();
-            }
+            } catch (e) { alert('操作失败: ' + e.message); }
         }
 
         function showAddConfig() {
@@ -481,44 +780,49 @@
             const value = prompt('请输入配置值:');
             if (value === null) return;
             const desc = prompt('请输入说明(可选):') || '';
-            apiCall('/admin/configs', 'POST', { config_key: key, config_value: value, description: desc }).then(() => {
-                alert('新增成功');
-                loadConfigs();
-            });
+            apiCall('/admin/configs', 'POST', { config_key: key, config_value: value, description: desc })
+                .then(() => { alert('新增成功'); loadConfigs(); })
+                .catch(e => alert('操作失败: ' + e.message));
         }
 
         async function loadCustomerConfigs() {
-            const configs = await apiCall('/admin/customer-configs');
-            const tbody = document.getElementById('customer-config-table');
-            if (configs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="empty">暂无数据</td></tr>';
-            } else {
-                tbody.innerHTML = configs.map(c => `
-                    <tr>
-                        <td>${c.customer_name}</td>
-                        <td><input type="number" value="${c.turnover_days}" id="cust-days-${c.id}" style="width: 80px; padding: 4px 8px; border: 1px solid #d9d9d9; border-radius: 4px;"></td>
-                        <td>${c.description || '-'}</td>
-                        <td>
-                            <button class="btn btn-primary" onclick="saveCustomerConfig('${c.customer_name}', ${c.id})">保存</button>
-                            <button class="btn btn-danger" onclick="deleteCustomerConfig('${c.customer_name}')">删除</button>
-                        </td>
-                    </tr>
-                `).join('');
-            }
+            try {
+                const configs = await apiCall('/admin/customer-configs');
+                const tbody = document.getElementById('customer-config-table');
+                if (configs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" class="empty">暂无数据</td></tr>';
+                } else {
+                    tbody.innerHTML = configs.map(c => `
+                        <tr>
+                            <td><strong>${c.customer_name}</strong></td>
+                            <td><input type="number" value="${c.turnover_days}" id="cust-days-${c.id}" style="width:100px;padding:6px 10px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;"></td>
+                            <td style="color:#8c8c8c;font-size:12px;">${c.description || '-'}</td>
+                            <td>
+                                <button class="btn btn-primary btn-sm" onclick="saveCustomerConfig('${c.customer_name}', ${c.id})">保存</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteCustomerConfig('${c.customer_name}')">删除</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) { console.error(e); }
         }
 
         async function saveCustomerConfig(name, id) {
             const days = parseInt(document.getElementById('cust-days-' + id).value);
-            await apiCall('/admin/customer-configs', 'POST', { customer_name: name, turnover_days: days });
-            alert('保存成功');
-            loadCustomerConfigs();
+            if (isNaN(days)) { alert('请输入有效的天数'); return; }
+            try {
+                await apiCall('/admin/customer-configs', 'POST', { customer_name: name, turnover_days: days });
+                alert('保存成功');
+                loadCustomerConfigs();
+            } catch (e) { alert('操作失败: ' + e.message); }
         }
 
         async function deleteCustomerConfig(name) {
-            if (confirm('确定删除此客户配置？')) {
+            if (!confirm('确定删除此客户配置？')) return;
+            try {
                 await apiCall('/admin/customer-configs/' + name, 'DELETE');
                 loadCustomerConfigs();
-            }
+            } catch (e) { alert('操作失败: ' + e.message); }
         }
 
         function showAddCustomerConfig() {
@@ -527,39 +831,39 @@
             const days = parseInt(prompt('请输入周转天数:', '7'));
             if (isNaN(days)) return;
             const desc = prompt('请输入说明(可选):') || '';
-            apiCall('/admin/customer-configs', 'POST', { customer_name: name, turnover_days: days, description: desc }).then(() => {
-                alert('新增成功');
-                loadCustomerConfigs();
-            });
+            apiCall('/admin/customer-configs', 'POST', { customer_name: name, turnover_days: days, description: desc })
+                .then(() => { alert('新增成功'); loadCustomerConfigs(); })
+                .catch(e => alert('操作失败: ' + e.message));
         }
 
         async function loadRecipients() {
-            const recipients = await apiCall('/admin/recipients');
-            const tbody = document.getElementById('recipient-table');
-            if (recipients.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无数据</td></tr>';
-            } else {
-                tbody.innerHTML = recipients.map(r => `
-                    <tr>
-                        <td>${r.name}</td>
-                        <td>${r.role}</td>
-                        <td>${r.phone || '-'}</td>
-                        <td>${r.email || '-'}</td>
-                        <td>${r.alert_types}</td>
-                        <td>${r.is_active ? '<span class="tag tag-success">启用</span>' : '<span class="tag tag-default">停用</span>'}</td>
-                        <td>
-                            <button class="btn btn-danger" onclick="deleteRecipient(${r.id})">删除</button>
-                        </td>
-                    </tr>
-                `).join('');
-            }
+            try {
+                const recipients = await apiCall('/admin/recipients');
+                const tbody = document.getElementById('recipient-table');
+                if (recipients.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无数据</td></tr>';
+                } else {
+                    tbody.innerHTML = recipients.map(r => `
+                        <tr>
+                            <td><strong>${r.name}</strong></td>
+                            <td>${getRoleTag(r.role)}</td>
+                            <td>${r.phone || '-'}</td>
+                            <td>${r.email || '-'}</td>
+                            <td style="font-size:12px;">${r.alert_types}</td>
+                            <td>${r.is_active ? '<span class="tag tag-success">启用</span>' : '<span class="tag tag-default">停用</span>'}</td>
+                            <td><button class="btn btn-danger btn-sm" onclick="deleteRecipient(${r.id})">删除</button></td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) { console.error(e); }
         }
 
         async function deleteRecipient(id) {
-            if (confirm('确定删除此接收人？')) {
+            if (!confirm('确定删除此接收人？')) return;
+            try {
                 await apiCall('/admin/recipients/' + id, 'DELETE');
                 loadRecipients();
-            }
+            } catch (e) { alert('操作失败: ' + e.message); }
         }
 
         function showAddRecipient() {
@@ -569,15 +873,14 @@
             if (!role) return;
             const phone = prompt('请输入电话(可选):') || '';
             const email = prompt('请输入邮箱(可选):') || '';
-            const alertTypes = prompt('请输入接收的提醒类型，多个用逗号分隔 (超期未回,同箱重复出库,温控异常,客户投诉,客户高占用):', '超期未回,同箱重复出库,温控异常,客户投诉,客户高占用');
+            const alertTypes = prompt('请输入接收的提醒类型，多个用逗号分隔:\n可选: 超期未回,同箱重复出库,温控异常,客户投诉,客户高占用',
+                '超期未回,同箱重复出库,温控异常,客户投诉,客户高占用');
             if (!alertTypes) return;
 
             apiCall('/admin/recipients', 'POST', {
                 name, role, phone, email, alert_types: alertTypes, is_active: true
-            }).then(() => {
-                alert('新增成功');
-                loadRecipients();
-            });
+            }).then(() => { alert('新增成功'); loadRecipients(); })
+              .catch(e => alert('操作失败: ' + e.message));
         }
 
         loadDashboard();

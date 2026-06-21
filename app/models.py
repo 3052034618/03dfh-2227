@@ -35,11 +35,14 @@ class TurnoverTask(Base):
     actual_return_date = Column(DateTime, nullable=True)
     status = Column(String(20), default="outbound", nullable=False)
     is_overdue = Column(Boolean, default=False)
+    is_duplicate = Column(Boolean, default=False)
+    duplicate_of_task_id = Column(Integer, ForeignKey("turnover_tasks.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     box = relationship("Box", back_populates="turnover_tasks")
     handover_records = relationship("HandoverRecord", back_populates="turnover_task")
+    duplicate_of_task = relationship("TurnoverTask", remote_side=[id])
 
 
 class HandoverRecord(Base):
@@ -103,9 +106,29 @@ class Alert(Base):
     target_roles = Column(String(200), nullable=False)
     is_read = Column(Boolean, default=False)
     is_handled = Column(Boolean, default=False)
+    last_pushed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
     box = relationship("Box", back_populates="alerts")
+    push_records = relationship("AlertPushRecord", back_populates="alert")
+
+
+class AlertPushRecord(Base):
+    __tablename__ = "alert_push_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=False)
+    alert_no = Column(String(50), index=True, nullable=False)
+    recipient_id = Column(Integer, ForeignKey("alert_recipients.id"), nullable=True)
+    recipient_name = Column(String(50), nullable=False)
+    recipient_role = Column(String(50), nullable=False)
+    push_channel = Column(String(20), default="system", nullable=False)
+    push_target = Column(String(100), nullable=True)
+    status = Column(String(20), default="success", nullable=False)
+    error_message = Column(Text, nullable=True)
+    pushed_at = Column(DateTime, default=datetime.now)
+
+    alert = relationship("Alert", back_populates="push_records")
 
 
 class SystemConfig(Base):

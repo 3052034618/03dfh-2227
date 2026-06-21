@@ -79,15 +79,15 @@ def create_alert(
     return alert
 
 
-def check_duplicate_outbound(db: Session, box_no: str) -> bool:
+def check_duplicate_outbound(db: Session, box_no: str) -> Optional[TurnoverTask]:
     box = db.query(Box).filter(Box.box_no == box_no).first()
     if not box:
-        return False
+        return None
     active_task = db.query(TurnoverTask).filter(
         TurnoverTask.box_no == box_no,
-        TurnoverTask.status.in_(["outbound", "in_transit", "signed"])
+        TurnoverTask.status.in_(["outbound", "in_transit", "signed", "temp_abnormal", "overdue"])
     ).first()
-    return active_task is not None
+    return active_task
 
 
 def check_overdue(db: Session, task: TurnoverTask) -> bool:
@@ -106,17 +106,22 @@ def check_temperature_abnormal(db: Session, box_id: int, temperature: float) -> 
 
 def check_customer_high_occupation(db: Session, customer: str) -> tuple:
     threshold = int(get_config_value(db, "customer_high_occupation_threshold", "10"))
-    active_count = db.query(TurnoverTask).filter(
+    active_tasks = db.query(TurnoverTask).filter(
         TurnoverTask.customer == customer,
-        TurnoverTask.status.in_(["outbound", "in_transit", "signed"])
-    ).count()
+        TurnoverTask.status.in_(["outbound", "in_transit", "signed", "temp_abnormal", "overdue"])
+    ).all()
+    unique_boxes = set()
+    for task in active_tasks:
+        if not task.is_duplicate:
+            unique_boxes.add(task.box_no)
+    active_count = len(unique_boxes)
     return active_count >= threshold, active_count
 
 
 def get_active_tasks_by_box(db: Session, box_no: str) -> List[TurnoverTask]:
     return db.query(TurnoverTask).filter(
         TurnoverTask.box_no == box_no,
-        TurnoverTask.status.in_(["outbound", "in_transit", "signed"])
+        TurnoverTask.status.in_(["outbound", "in_transit", "signed", "temp_abnormal", "overdue"])
     ).all()
 
 
@@ -131,7 +136,7 @@ def run_overdue_check(db: Session) -> List[Alert]:
             if not task.is_overdue:
                 task.is_overdue = True
                 box = db.query(Box).filter(Box.id == task.box_id).first()
-                if box:
+                if box and box.status != "temp_abnormal":
                     box.status = "overdue"
 
                 alert = create_alert(

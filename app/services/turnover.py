@@ -17,7 +17,8 @@ class TurnoverService:
 
     def process_outbound(self, box_no: str, customer: str, route: str,
                          expected_return_date: datetime, operator: str = None) -> dict:
-        is_duplicate = check_duplicate_outbound(self.db, box_no)
+        existing_task = check_duplicate_outbound(self.db, box_no)
+        is_duplicate = existing_task is not None
 
         box = self.db.query(Box).filter(Box.box_no == box_no).first()
         if not box:
@@ -25,7 +26,8 @@ class TurnoverService:
             self.db.add(box)
             self.db.flush()
         else:
-            box.status = "outbound"
+            if box.status != "temp_abnormal":
+                box.status = "outbound"
             box.current_customer = customer
             box.current_route = route
             self.db.flush()
@@ -37,7 +39,9 @@ class TurnoverService:
             customer=customer,
             route=route,
             expected_return_date=expected_return_date,
-            status="outbound"
+            status="outbound",
+            is_duplicate=is_duplicate,
+            duplicate_of_task_id=existing_task.id if existing_task else None
         )
         self.db.add(task)
         self.db.flush()
@@ -49,13 +53,14 @@ class TurnoverService:
             record_type="出库",
             location=route,
             operator=operator,
-            remark="订单出库"
+            remark="订单出库" + ("（重复出库警告）" if is_duplicate else "")
         )
         self.db.add(handover)
 
         alerts = []
 
         if is_duplicate:
+            extra = f"该箱体已有在途任务（{existing_task.task_no}，客户: {existing_task.customer}），新任务客户: {customer}"
             alert = create_alert(
                 db=self.db,
                 alert_type="同箱重复出库",
@@ -64,27 +69,28 @@ class TurnoverService:
                 suggested_action="立即核查箱体状态，确认是否存在错发或系统数据异常",
                 box_id=box.id,
                 box_no=box_no,
-                extra_info=f"该箱体已有在途任务，新任务客户: {customer}",
+                extra_info=extra,
                 target_roles="warehouse,dispatch"
             )
             alerts.append(alert)
             self.notification.push_alert(alert)
 
-        is_high_occ, count = check_customer_high_occupation(self.db, customer)
-        if is_high_occ:
-            alert = create_alert(
-                db=self.db,
-                alert_type="客户高占用",
-                severity="warning",
-                responsible_node="调度",
-                suggested_action=f"评估客户 {customer} 的箱体占用情况，必要时催还或补充库存",
-                box_id=box.id,
-                box_no=box_no,
-                extra_info=f"客户当前占用箱体数: {count}",
-                target_roles="dispatch,manager"
-            )
-            alerts.append(alert)
-            self.notification.push_alert(alert)
+        if not is_duplicate:
+            is_high_occ, count = check_customer_high_occupation(self.db, customer)
+            if is_high_occ:
+                alert = create_alert(
+                    db=self.db,
+                    alert_type="客户高占用",
+                    severity="warning",
+                    responsible_node="调度",
+                    suggested_action=f"评估客户 {customer} 的箱体占用情况，必要时催还或补充库存",
+                    box_id=box.id,
+                    box_no=box_no,
+                    extra_info=f"客户当前占用箱体数: {count}（已去重）",
+                    target_roles="dispatch,manager"
+                )
+                alerts.append(alert)
+                self.notification.push_alert(alert)
 
         self.db.commit()
         self.db.refresh(task)
@@ -92,6 +98,7 @@ class TurnoverService:
         return {
             "task": task,
             "duplicate_warning": is_duplicate,
+            "duplicate_of_task_no": existing_task.task_no if existing_task else None,
             "alerts": alerts
         }
 
@@ -105,10 +112,12 @@ class TurnoverService:
         if not active_tasks:
             return {"success": False, "message": f"箱体 {box_no} 无在途任务"}
 
-        task = active_tasks[0]
+        primary_tasks = [t for t in active_tasks if not t.is_duplicate]
+        task = primary_tasks[0] if primary_tasks else active_tasks[0]
         task.status = "signed"
 
-        box.status = "signed"
+        if box.status != "temp_abnormal":
+            box.status = "signed"
 
         handover = HandoverRecord(
             box_id=box.id,
@@ -136,9 +145,13 @@ class TurnoverService:
         if not active_tasks:
             return {"success": False, "message": f"箱体 {box_no} 无在途任务"}
 
-        task = active_tasks[0]
-        task.status = "returned"
-        task.actual_return_date = datetime.now()
+        now = datetime.now()
+        primary_tasks = [t for t in active_tasks if not t.is_duplicate]
+        task = primary_tasks[0] if primary_tasks else active_tasks[0]
+
+        for t in active_tasks:
+            t.status = "returned"
+            t.actual_return_date = now
 
         box.status = "idle"
         box.current_customer = None
@@ -158,7 +171,7 @@ class TurnoverService:
         self.db.commit()
         self.db.refresh(task)
 
-        return {"success": True, "task": task}
+        return {"success": True, "task": task, "closed_tasks": len(active_tasks)}
 
     def process_temperature(self, box_no: str, temperature: float,
                             recorded_at: datetime = None) -> dict:
@@ -167,13 +180,14 @@ class TurnoverService:
             return {"success": False, "message": f"箱体 {box_no} 不存在"}
 
         is_abnormal = check_temperature_abnormal(self.db, box.id, temperature)
+        now = recorded_at or datetime.now()
 
         temp_record = TemperatureRecord(
             box_id=box.id,
             box_no=box_no,
             temperature=temperature,
             is_abnormal=is_abnormal,
-            recorded_at=recorded_at or datetime.now()
+            recorded_at=now
         )
         self.db.add(temp_record)
 
@@ -193,10 +207,13 @@ class TurnoverService:
             alerts.append(alert)
             self.notification.push_alert(alert)
 
-            if box.status == "signed":
+            if box.status != "returned" and box.status != "idle":
                 box.status = "temp_abnormal"
-            elif box.status == "in_transit":
-                box.status = "temp_abnormal"
+
+            active_tasks = get_active_tasks_by_box(self.db, box_no)
+            for t in active_tasks:
+                if t.status != "returned":
+                    t.status = "temp_abnormal"
 
         self.db.commit()
 

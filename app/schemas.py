@@ -76,7 +76,25 @@ class AlertResponse(BaseModel):
     target_roles: str
     is_read: bool
     is_handled: bool
+    last_pushed_at: Optional[datetime]
     created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AlertPushRecordResponse(BaseModel):
+    id: int
+    alert_id: int
+    alert_no: str
+    recipient_id: Optional[int]
+    recipient_name: str
+    recipient_role: str
+    push_channel: str
+    push_target: Optional[str]
+    status: str
+    error_message: Optional[str]
+    pushed_at: datetime
 
     class Config:
         from_attributes = True
@@ -113,6 +131,8 @@ class TurnoverTaskResponse(BaseModel):
     actual_return_date: Optional[datetime]
     status: str
     is_overdue: bool
+    is_duplicate: bool
+    duplicate_of_task_id: Optional[int]
     created_at: datetime
 
     class Config:

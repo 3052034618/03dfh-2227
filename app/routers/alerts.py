@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 
 from app.database import get_db
-from app.schemas import AlertResponse
+from app.schemas import AlertResponse, AlertPushRecordResponse
 from app.services import NotificationService, run_all_checks, run_overdue_check
-from app.models import Alert
+from app.models import Alert, AlertPushRecord
 
 router = APIRouter(prefix="/api/alerts", tags=["提醒管理"])
 
@@ -24,10 +24,33 @@ def get_alerts(
     return query.order_by(Alert.created_at.desc()).all()
 
 
-@router.get("/{alert_id}", response_model=AlertResponse, summary="查询提醒详情")
+@router.get("/{alert_id}", summary="查询提醒详情（含推送记录）")
 def get_alert(alert_id: int, db: Session = Depends(get_db)):
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
-    return alert
+    if not alert:
+        return None
+    push_records = db.query(AlertPushRecord).filter(
+        AlertPushRecord.alert_id == alert_id
+    ).order_by(AlertPushRecord.pushed_at.desc()).all()
+    return {
+        "alert": AlertResponse.model_validate(alert).model_dump(),
+        "push_records": [AlertPushRecordResponse.model_validate(r).model_dump() for r in push_records]
+    }
+
+
+@router.get("/{alert_id}/push-records", response_model=List[AlertPushRecordResponse], summary="查询提醒推送记录")
+def get_alert_push_records(alert_id: int, db: Session = Depends(get_db)):
+    return db.query(AlertPushRecord).filter(
+        AlertPushRecord.alert_id == alert_id
+    ).order_by(AlertPushRecord.pushed_at.desc()).all()
+
+
+@router.post("/{alert_id}/push", summary="重新推送提醒")
+def push_alert_again(alert_id: int, db: Session = Depends(get_db)):
+    service = NotificationService(db)
+    result = service.push_alert_again(alert_id)
+    db.commit()
+    return result
 
 
 @router.put("/{alert_id}/read", summary="标记已读")

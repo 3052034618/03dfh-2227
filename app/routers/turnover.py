@@ -105,3 +105,118 @@ def get_handover_records(box_no: str, db: Session = Depends(get_db)):
         HandoverRecord.box_no == box_no
     ).order_by(HandoverRecord.recorded_at.desc()).all()
     return records
+
+
+@router.get("/timeline/{box_no}", summary="箱体全链路时间线")
+def get_box_timeline(box_no: str, db: Session = Depends(get_db)):
+    """
+    获取箱体全链路时间线：出库、签收、温度、投诉、回仓、提醒等事件串联
+    """
+    from app.models import (
+        Box, HandoverRecord, TemperatureRecord,
+        Complaint, Alert, TurnoverTask
+    )
+
+    box = db.query(Box).filter(Box.box_no == box_no).first()
+    if not box:
+        raise HTTPException(status_code=404, detail=f"箱体 {box_no} 不存在")
+
+    events = []
+
+    handovers = db.query(HandoverRecord).filter(
+        HandoverRecord.box_no == box_no
+    ).order_by(HandoverRecord.recorded_at.asc()).all()
+    for h in handovers:
+        icon_map = {"出库": "📦", "签收": "✅", "回仓": "🏠"}
+        events.append({
+            "event_type": f"交接-{h.record_type}",
+            "event_time": h.recorded_at,
+            "icon": icon_map.get(h.record_type, "📝"),
+            "title": f"{h.record_type}",
+            "description": f"地点: {h.location or '-'}，操作人: {h.operator or '-'}，备注: {h.remark or '-'}",
+            "data": {"id": h.id, "location": h.location, "operator": h.operator, "remark": h.remark}
+        })
+
+    temps = db.query(TemperatureRecord).filter(
+        TemperatureRecord.box_no == box_no
+    ).order_by(TemperatureRecord.recorded_at.asc()).all()
+    for t in temps:
+        if t.is_abnormal:
+            events.append({
+                "event_type": "温度异常",
+                "event_time": t.recorded_at,
+                "icon": "🌡️",
+                "title": f"温度越界: {t.temperature}°C",
+                "description": f"温度 {t.temperature}°C 超出阈值范围，请排查温控设备",
+                "severity": "danger",
+                "data": {"id": t.id, "temperature": t.temperature}
+            })
+
+    complaints = db.query(Complaint).filter(
+        Complaint.box_no == box_no
+    ).order_by(Complaint.created_at.asc()).all()
+    for c in complaints:
+        events.append({
+            "event_type": "客户投诉",
+            "event_time": c.created_at,
+            "icon": "📢",
+            "title": f"{c.complaint_type}（客户: {c.customer}）",
+            "description": c.description or "无详细描述",
+            "severity": "warning",
+            "data": {"id": c.id, "complaint_no": c.complaint_no, "complaint_type": c.complaint_type, "status": c.status}
+        })
+
+    alerts = db.query(Alert).filter(
+        Alert.box_no == box_no
+    ).order_by(Alert.created_at.asc()).all()
+    for a in alerts:
+        sev_map = {"high": "danger", "warning": "warning", "low": "info"}
+        status_text = "已处理" if a.is_handled else ("已读" if a.is_read else "待处理")
+        events.append({
+            "event_type": f"提醒-{a.alert_type}",
+            "event_time": a.created_at,
+            "icon": "🔔",
+            "title": f"{a.alert_type} [{status_text}]",
+            "description": f"责任节点: {a.responsible_node}，建议动作: {a.suggested_action}，推送给: {a.target_roles}",
+            "severity": sev_map.get(a.severity, "info"),
+            "data": {"id": a.id, "alert_no": a.alert_no, "alert_type": a.alert_type, "is_handled": a.is_handled, "is_read": a.is_read, "last_pushed_at": a.last_pushed_at.isoformat() if a.last_pushed_at else None}
+        })
+
+    tasks = db.query(TurnoverTask).filter(
+        TurnoverTask.box_no == box_no
+    ).order_by(TurnoverTask.created_at.asc()).all()
+    for t in tasks:
+        if t.is_duplicate:
+            events.append({
+                "event_type": "系统标记",
+                "event_time": t.created_at,
+                "icon": "⚠️",
+                "title": f"重复出库任务: {t.task_no}",
+                "description": f"该任务为重复出库，客户: {t.customer}，线路: {t.route}，请仓库核查",
+                "severity": "warning",
+                "data": {"task_no": t.task_no, "is_duplicate": True, "customer": t.customer}
+            })
+
+    events.sort(key=lambda e: e["event_time"])
+
+    next_action = None
+    if box.status == "temp_abnormal":
+        next_action = "立即排查温控设备，联系客户确认货物情况，必要时安排换货"
+    elif box.status == "overdue":
+        next_action = "联系客户催还箱体，必要时安排上门回收"
+    elif box.status == "signed" or box.status == "outbound" or box.status == "in_transit":
+        next_action = "跟踪箱体状态，到期前提醒客户归还"
+    elif box.status == "idle":
+        next_action = "箱体已回仓入库，可正常调度使用"
+
+    return {
+        "box": {
+            "box_no": box.box_no,
+            "status": box.status,
+            "current_customer": box.current_customer,
+            "current_route": box.current_route
+        },
+        "total_events": len(events),
+        "next_suggested_action": next_action,
+        "events": events
+    }
