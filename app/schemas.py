@@ -76,6 +76,10 @@ class AlertResponse(BaseModel):
     target_roles: str
     is_read: bool
     is_handled: bool
+    handled_by: Optional[str]
+    handled_at: Optional[datetime]
+    handled_note: Optional[str]
+    assigned_to: Optional[str]
     last_pushed_at: Optional[datetime]
     created_at: datetime
 
@@ -98,6 +102,63 @@ class AlertPushRecordResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class AlertDisposalResponse(BaseModel):
+    id: int
+    alert_id: int
+    alert_no: str
+    disposal_type: str
+    operator_name: str
+    operator_role: str
+    disposal_note: Optional[str]
+    assigned_to_role: Optional[str]
+    assigned_to_name: Optional[str]
+    disposal_result: Optional[str]
+    disposed_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class HandleAlertRequest(BaseModel):
+    handled_by: str = Field(..., description="处理人姓名")
+    handled_note: Optional[str] = Field(None, description="处理备注")
+    disposal_result: Optional[str] = Field(None, description="处理结果")
+
+
+class AssignAlertRequest(BaseModel):
+    operator_name: str = Field(..., description="操作人姓名")
+    operator_role: str = Field(..., description="操作人角色")
+    assigned_to_role: str = Field(..., description="转派目标角色")
+    assigned_to_name: str = Field(..., description="转派目标姓名")
+    disposal_note: Optional[str] = Field(None, description="转派备注")
+
+
+class BatchHandleRequest(BaseModel):
+    alert_ids: List[int] = Field(..., description="要处理的提醒ID列表")
+    handled_by: str = Field(..., description="处理人姓名")
+    handled_note: str = Field(..., description="批量处理说明")
+    disposal_result: Optional[str] = Field(None, description="处理结果")
+
+
+class DashboardSummary(BaseModel):
+    total_pending: int
+    total_handled: int
+    avg_processing_minutes: float
+    total_temp_abnormal: int
+    total_overdue: int
+    total_complaint: int
+    total_duplicate: int
+
+
+class DashboardItem(BaseModel):
+    dimension: str
+    dimension_value: str
+    pending_count: int
+    avg_processing_minutes: float
+    latest_alert_id: Optional[int]
+    latest_box_no: Optional[str]
 
 
 class SystemConfigRequest(BaseModel):

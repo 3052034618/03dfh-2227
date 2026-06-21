@@ -106,11 +106,16 @@ class Alert(Base):
     target_roles = Column(String(200), nullable=False)
     is_read = Column(Boolean, default=False)
     is_handled = Column(Boolean, default=False)
+    handled_by = Column(String(50), nullable=True)
+    handled_at = Column(DateTime, nullable=True)
+    handled_note = Column(Text, nullable=True)
+    assigned_to = Column(String(50), nullable=True)
     last_pushed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
     box = relationship("Box", back_populates="alerts")
     push_records = relationship("AlertPushRecord", back_populates="alert")
+    disposals = relationship("AlertDisposal", back_populates="alert")
 
 
 class AlertPushRecord(Base):
@@ -129,6 +134,24 @@ class AlertPushRecord(Base):
     pushed_at = Column(DateTime, default=datetime.now)
 
     alert = relationship("Alert", back_populates="push_records")
+
+
+class AlertDisposal(Base):
+    __tablename__ = "alert_disposals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=False)
+    alert_no = Column(String(50), index=True, nullable=False)
+    disposal_type = Column(String(20), nullable=False)  # handle / assign
+    operator_name = Column(String(50), nullable=False)
+    operator_role = Column(String(50), nullable=False)
+    disposal_note = Column(Text, nullable=True)
+    assigned_to_role = Column(String(50), nullable=True)
+    assigned_to_name = Column(String(50), nullable=True)
+    disposal_result = Column(String(100), nullable=True)
+    disposed_at = Column(DateTime, default=datetime.now)
+
+    alert = relationship("Alert", back_populates="disposals")
 
 
 class SystemConfig(Base):

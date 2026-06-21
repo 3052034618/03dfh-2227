@@ -111,6 +111,21 @@
 
         .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
         @media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr; } }
+
+        .batch-bar { background: #f0f5ff; border: 1px solid #d6e4ff; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+        .batch-bar .btn { min-width: 100px; }
+        .alert-checkbox { width: 16px; height: 16px; cursor: pointer; margin-right: 8px; }
+        .tab-nav { display: flex; gap: 4px; border-bottom: 2px solid #f0f0f0; margin-bottom: 16px; flex-wrap: wrap; }
+        .tab-btn { padding: 10px 20px; border: none; background: none; cursor: pointer; font-size: 14px; color: #595959; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+        .tab-btn:hover { color: #1890ff; }
+        .tab-btn.active { color: #1890ff; border-bottom-color: #1890ff; font-weight: 500; }
+        .disposal-section { margin-top: 20px; padding-top: 20px; border-top: 1px solid #f0f0f0; }
+        .disposal-section h4 { font-size: 14px; margin-bottom: 12px; color: #262626; }
+        .action-area { background: #fafafa; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .action-area-title { font-size: 14px; font-weight: 600; color: #262626; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+        .disposal-type-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .disposal-type-tag.handle { background: #f6ffed; color: #52c41a; }
+        .disposal-type-tag.assign { background: #fff7e6; color: #fa8c16; }
     </style>
 </head>
 <body>
@@ -124,9 +139,10 @@
             <button class="nav-btn active" onclick="showPage('dashboard', event)">仪表盘</button>
             <button class="nav-btn" onclick="showPage('alerts', event)">提醒中心</button>
             <button class="nav-btn" onclick="showPage('boxes', event)">箱体管理</button>
-            <button class="nav-btn" onclick="showPage('timeline', event)">🔍 箱体时间线</button>
             <button class="nav-btn" onclick="showPage('tasks', event)">周转任务</button>
             <button class="nav-btn" onclick="showPage('config', event)">系统配置</button>
+            <button class="nav-btn" onclick="showPage('timeline', event)">🔍 箱体时间线</button>
+            <button class="nav-btn" onclick="showPage('dashboard-resp', event)">📊 责任节点看板</button>
         </div>
 
         <div id="page-dashboard" class="page active">
@@ -184,6 +200,11 @@
                             <option value="manager">管理人员</option>
                         </select>
                     </div>
+                </div>
+                <div class="batch-bar" id="batch-bar" style="display:none;">
+                    <span id="selected-count" style="font-size:13px;color:#595959;">已选择 0 条</span>
+                    <button class="btn btn-default btn-sm" onclick="toggleSelectAll()">全选/取消全选</button>
+                    <button class="btn btn-success btn-sm" onclick="showBatchHandleModal()">批量标记已跟进</button>
                 </div>
                 <div id="alerts-list"></div>
             </div>
@@ -329,6 +350,28 @@
                 </div>
             </div>
         </div>
+
+        <div id="page-dashboard-resp" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📊 责任节点看板</h2>
+                    <button class="btn btn-default btn-sm" onclick="loadDashboardResp()">🔄 刷新</button>
+                </div>
+                <div class="stats-grid" id="resp-summary-grid"></div>
+            </div>
+
+            <div class="card">
+                <div class="tab-nav">
+                    <button class="tab-btn active" data-tab="customer" onclick="switchTab('customer')">按客户</button>
+                    <button class="tab-btn" data-tab="route" onclick="switchTab('route')">按线路</button>
+                    <button class="tab-btn" data-tab="box" onclick="switchTab('box')">按箱号</button>
+                    <button class="tab-btn" data-tab="type" onclick="switchTab('type')">按异常类型</button>
+                </div>
+                <div id="resp-table-container">
+                    <div class="empty"><div class="empty-icon">📊</div>请选择标签页查看数据</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="modal-root"></div>
@@ -354,6 +397,7 @@
             else if (page === 'tasks') loadTasks();
             else if (page === 'config') { loadConfigs(); loadCustomerConfigs(); loadRecipients(); }
             else if (page === 'timeline') { const q = document.getElementById('timeline-boxno').value; if (q) loadTimeline(); }
+            else if (page === 'dashboard-resp') loadDashboardResp();
         }
 
         function pageName(p) { return ''; }
@@ -450,6 +494,7 @@
                 <div class="alert-item ${cls}">
                     <div class="alert-header">
                         <div class="alert-title-wrap">
+                            ${!compact ? `<input type="checkbox" class="alert-checkbox" data-id="${alert.id}" onchange="updateSelectedCount()">` : ''}
                             <span class="alert-title">${alert.alert_type}</span>
                             ${getSeverityTag(alert.severity)}
                             ${alert.box_no ? `<span class="tag tag-info" onclick="viewBoxTimeline('${alert.box_no}')" style="cursor:pointer;" title="查看时间线">📦 ${alert.box_no}</span>` : ''}
@@ -463,6 +508,7 @@
                         <span class="alert-time">创建: ${formatTime(alert.created_at)}</span>
                         <div class="alert-actions">
                             <button class="btn btn-default btn-sm" onclick="showAlertDetail(${alert.id})">推送记录</button>
+                            ${!alert.is_handled ? `<button class="btn btn-primary btn-sm" onclick="showDisposalModal(${alert.id})">处置</button>` : ''}
                             ${!alert.is_handled ? `<button class="btn btn-success btn-sm" onclick="handleAlert(${alert.id})">标记处理</button>` : ''}
                         </div>
                     </div>
@@ -494,9 +540,7 @@
                 const data = await apiCall(`/alerts/${alertId}`);
                 const a = data.alert;
                 const records = data.push_records || [];
-
-                const channelMap = { sms: '📱 短信', email: '📧 邮件', system: '💻 系统内' };
-                const roleMap = { dispatch: '调度', warehouse: '仓库', customer_service: '客服', manager: '管理' };
+                const disposals = data.disposals || [];
 
                 const pushRecordsHtml = records.length === 0 ? '<div class="empty" style="padding:20px;">暂无推送记录</div>' : `
                     <table class="push-table" style="width:100%;">
@@ -518,6 +562,99 @@
                     </table>
                 `;
 
+                const disposalsHtml = disposals.length === 0 ? '<div class="empty" style="padding:20px;">暂无处置记录</div>' : `
+                    <table class="push-table" style="width:100%;">
+                        <thead>
+                            <tr><th>时间</th><th>类型</th><th>操作人</th><th>处理结果</th><th>备注</th></tr>
+                        </thead>
+                        <tbody>
+                            ${disposals.map(d => `
+                                <tr>
+                                    <td style="color:#8c8c8c;font-size:12px;">${formatTime(d.disposed_at)}</td>
+                                    <td>${d.disposal_type === 'handle' ? '<span class="disposal-type-tag handle">处置</span>' : '<span class="disposal-type-tag assign">转派</span>'}</td>
+                                    <td><strong>${d.operator_name}</strong>${d.operator_role ? ` (${d.operator_role})` : ''}</td>
+                                    <td>${d.disposal_result || '-'}</td>
+                                    <td style="font-size:12px;color:#595959;">${d.disposal_note || '-'}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+
+                const roleOptions = `
+                    <option value="dispatch">调度</option>
+                    <option value="warehouse">仓库</option>
+                    <option value="customer_service">客服</option>
+                    <option value="manager">管理人员</option>
+                `;
+
+                const resultOptions = `
+                    <option value="已跟进处理">已跟进处理</option>
+                    <option value="已联系客户">已联系客户</option>
+                    <option value="已上门回收">已上门回收</option>
+                    <option value="其他">其他</option>
+                `;
+
+                const handleAreaHtml = !a.is_handled ? `
+                    <div class="action-area">
+                        <div class="action-area-title">🎯 处置台</div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>处理人姓名</label>
+                                <input type="text" id="handle-person" placeholder="请输入处理人姓名">
+                            </div>
+                            <div class="form-item">
+                                <label>处理结果</label>
+                                <select id="handle-result">${resultOptions}</select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>处理备注</label>
+                                <textarea id="handle-note" rows="2" placeholder="请输入处理备注"></textarea>
+                            </div>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;">
+                            <button class="btn btn-success" onclick="submitHandle(${a.id})">提交处理</button>
+                        </div>
+                    </div>
+                ` : '';
+
+                const assignAreaHtml = !a.is_handled ? `
+                    <div class="action-area">
+                        <div class="action-area-title">🔄 转派</div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>操作人姓名</label>
+                                <input type="text" id="assign-operator" placeholder="请输入操作人姓名">
+                            </div>
+                            <div class="form-item">
+                                <label>操作人角色</label>
+                                <select id="assign-operator-role">${roleOptions}</select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>转派目标角色</label>
+                                <select id="assign-target-role">${roleOptions}</select>
+                            </div>
+                            <div class="form-item">
+                                <label>转派目标姓名</label>
+                                <input type="text" id="assign-target-name" placeholder="请输入转派目标姓名">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>转派备注</label>
+                                <textarea id="assign-note" rows="2" placeholder="请输入转派备注"></textarea>
+                            </div>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;">
+                            <button class="btn btn-primary" onclick="submitAssign(${a.id})">提交转派</button>
+                        </div>
+                    </div>
+                ` : '';
+
                 const html = `
                     <div style="display:flex;flex-direction:column;gap:16px;">
                         <div>
@@ -535,6 +672,18 @@
                             <h4 style="font-size:14px;margin-bottom:8px;color:#262626;">📡 推送记录（${records.length} 条）</h4>
                             ${pushRecordsHtml}
                         </div>
+
+                        <div class="disposal-section">
+                            <h4 style="font-size:14px;margin-bottom:8px;color:#262626;">📝 处置记录（${disposals.length} 条）</h4>
+                            ${disposalsHtml}
+                        </div>
+
+                        ${!a.is_handled ? `
+                            <div class="disposal-section">
+                                ${handleAreaHtml}
+                                ${assignAreaHtml}
+                            </div>
+                        ` : ''}
 
                         <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0f0f0;">
                             <button class="btn btn-default" onclick="repushAlert(${a.id})">🔄 重新推送</button>
@@ -558,10 +707,16 @@
 
         async function handleAlert(id) {
             try {
-                await apiCall(`/alerts/${id}/handle`, 'PUT');
+                const handledBy = prompt('请输入处理人姓名:', '系统');
+                if (!handledBy) return;
+                await apiCall(`/alerts/${id}/handle`, 'POST', {
+                    handled_by: handledBy,
+                    handled_note: '快速标记处理',
+                    disposal_result: '已跟进处理'
+                });
                 if (currentPage === 'dashboard') loadDashboard();
                 else if (currentPage === 'alerts') loadAlerts();
-                else if (document.getElementById('alert-detail-root')) showAlertDetail(id);
+                else showAlertDetail(id);
             } catch (e) { alert('操作失败: ' + e.message); }
         }
 
@@ -881,6 +1036,399 @@
                 name, role, phone, email, alert_types: alertTypes, is_active: true
             }).then(() => { alert('新增成功'); loadRecipients(); })
               .catch(e => alert('操作失败: ' + e.message));
+        }
+
+        function updateSelectedCount() {
+            const checkboxes = document.querySelectorAll('.alert-checkbox:checked');
+            const count = checkboxes.length;
+            document.getElementById('selected-count').textContent = `已选择 ${count} 条`;
+            document.getElementById('batch-bar').style.display = count > 0 ? 'flex' : 'none';
+        }
+
+        function toggleSelectAll() {
+            const checkboxes = document.querySelectorAll('.alert-checkbox');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+            updateSelectedCount();
+        }
+
+        function getSelectedAlertIds() {
+            return Array.from(document.querySelectorAll('.alert-checkbox:checked')).map(cb => parseInt(cb.dataset.id));
+        }
+
+        function showDisposalModal(alertId) {
+            const roleOptions = `
+                <option value="dispatch">调度</option>
+                <option value="warehouse">仓库</option>
+                <option value="customer_service">客服</option>
+                <option value="manager">管理人员</option>
+            `;
+
+            const resultOptions = `
+                <option value="已跟进处理">已跟进处理</option>
+                <option value="已联系客户">已联系客户</option>
+                <option value="已上门回收">已上门回收</option>
+                <option value="其他">其他</option>
+            `;
+
+            const html = `
+                <div style="display:flex;flex-direction:column;gap:16px;">
+                    <div class="action-area">
+                        <div class="action-area-title">🎯 处置台</div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>处理人姓名</label>
+                                <input type="text" id="handle-person" placeholder="请输入处理人姓名">
+                            </div>
+                            <div class="form-item">
+                                <label>处理结果</label>
+                                <select id="handle-result">${resultOptions}</select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>处理备注</label>
+                                <textarea id="handle-note" rows="3" placeholder="请输入处理备注"></textarea>
+                            </div>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;">
+                            <button class="btn btn-success" onclick="submitHandle(${alertId}, true)">提交处理</button>
+                        </div>
+                    </div>
+
+                    <div class="action-area">
+                        <div class="action-area-title">🔄 转派</div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>操作人姓名</label>
+                                <input type="text" id="assign-operator" placeholder="请输入操作人姓名">
+                            </div>
+                            <div class="form-item">
+                                <label>操作人角色</label>
+                                <select id="assign-operator-role">${roleOptions}</select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>转派目标角色</label>
+                                <select id="assign-target-role">${roleOptions}</select>
+                            </div>
+                            <div class="form-item">
+                                <label>转派目标姓名</label>
+                                <input type="text" id="assign-target-name" placeholder="请输入转派目标姓名">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>转派备注</label>
+                                <textarea id="assign-note" rows="3" placeholder="请输入转派备注"></textarea>
+                            </div>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;">
+                            <button class="btn btn-primary" onclick="submitAssign(${alertId}, true)">提交转派</button>
+                        </div>
+                    </div>
+
+                    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0f0f0;">
+                        <button class="btn btn-default" onclick="closeModal()">关闭</button>
+                    </div>
+                </div>
+            `;
+
+            showModal('处置提醒', html);
+        }
+
+        function showBatchHandleModal() {
+            const ids = getSelectedAlertIds();
+            if (ids.length === 0) {
+                alert('请先选择要处理的提醒');
+                return;
+            }
+
+            const resultOptions = `
+                <option value="已跟进处理">已跟进处理</option>
+                <option value="已联系客户">已联系客户</option>
+                <option value="已上门回收">已上门回收</option>
+                <option value="其他">其他</option>
+            `;
+
+            const html = `
+                <div style="display:flex;flex-direction:column;gap:16px;">
+                    <div class="card" style="margin-bottom:0;">
+                        <div class="card-header" style="margin-bottom:8px;padding:0;">
+                            <h3 style="font-size:14px;">批量处理提醒</h3>
+                        </div>
+                        <p style="font-size:13px;color:#595959;margin-bottom:16px;">已选择 ${ids.length} 条待处理提醒</p>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>处理人姓名 *</label>
+                                <input type="text" id="batch-handle-person" placeholder="请输入处理人姓名">
+                            </div>
+                            <div class="form-item">
+                                <label>处理结果</label>
+                                <select id="batch-handle-result">${resultOptions}</select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-item">
+                                <label>处理说明 *</label>
+                                <textarea id="batch-handle-note" rows="3" placeholder="请输入批量处理说明"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="batch-handle-status"></div>
+                    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid #f0f0f0;">
+                        <button class="btn btn-default" onclick="closeModal()">取消</button>
+                        <button class="btn btn-success" id="batch-handle-btn" onclick="submitBatchHandle()">提交处理</button>
+                    </div>
+                </div>
+            `;
+
+            showModal('批量处理', html);
+        }
+
+        async function submitHandle(alertId, fromModal = false) {
+            const handledBy = document.getElementById('handle-person').value.trim();
+            const handledNote = document.getElementById('handle-note').value.trim();
+            const disposalResult = document.getElementById('handle-result').value;
+
+            if (!handledBy) {
+                alert('请输入处理人姓名');
+                return;
+            }
+
+            try {
+                const btns = document.querySelectorAll('button[onclick*="submitHandle"]');
+                btns.forEach(btn => {
+                    btn.textContent = '处理中...';
+                    btn.disabled = true;
+                });
+
+                await apiCall(`/alerts/${alertId}/handle`, 'POST', {
+                    handled_by: handledBy,
+                    handled_note: handledNote,
+                    disposal_result: disposalResult
+                });
+
+                alert('处理成功');
+                if (fromModal) closeModal();
+                if (currentPage === 'dashboard') loadDashboard();
+                else if (currentPage === 'alerts') loadAlerts();
+                else showAlertDetail(alertId);
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+                const btns = document.querySelectorAll('button[onclick*="submitHandle"]');
+                btns.forEach(btn => {
+                    btn.textContent = '提交处理';
+                    btn.disabled = false;
+                });
+            }
+        }
+
+        async function submitAssign(alertId, fromModal = false) {
+            const operatorName = document.getElementById('assign-operator').value.trim();
+            const operatorRole = document.getElementById('assign-operator-role').value;
+            const assignedToRole = document.getElementById('assign-target-role').value;
+            const assignedToName = document.getElementById('assign-target-name').value.trim();
+            const disposalNote = document.getElementById('assign-note').value.trim();
+
+            if (!operatorName) {
+                alert('请输入操作人姓名');
+                return;
+            }
+            if (!assignedToName) {
+                alert('请输入转派目标姓名');
+                return;
+            }
+
+            try {
+                const btns = document.querySelectorAll('button[onclick*="submitAssign"]');
+                btns.forEach(btn => {
+                    btn.textContent = '转派中...';
+                    btn.disabled = true;
+                });
+
+                await apiCall(`/alerts/${alertId}/assign`, 'POST', {
+                    operator_name: operatorName,
+                    operator_role: operatorRole,
+                    assigned_to_role: assignedToRole,
+                    assigned_to_name: assignedToName,
+                    disposal_note: disposalNote
+                });
+
+                alert('转派成功');
+                if (fromModal) closeModal();
+                if (currentPage === 'dashboard') loadDashboard();
+                else if (currentPage === 'alerts') loadAlerts();
+                else showAlertDetail(alertId);
+            } catch (e) {
+                alert('操作失败: ' + e.message);
+                const btns = document.querySelectorAll('button[onclick*="submitAssign"]');
+                btns.forEach(btn => {
+                    btn.textContent = '提交转派';
+                    btn.disabled = false;
+                });
+            }
+        }
+
+        async function submitBatchHandle() {
+            const ids = getSelectedAlertIds();
+            if (ids.length === 0) {
+                alert('请先选择要处理的提醒');
+                return;
+            }
+
+            const handledBy = document.getElementById('batch-handle-person').value.trim();
+            const handledNote = document.getElementById('batch-handle-note').value.trim();
+            const disposalResult = document.getElementById('batch-handle-result').value;
+
+            if (!handledBy) {
+                alert('请输入处理人姓名');
+                return;
+            }
+            if (!handledNote) {
+                alert('请输入处理说明');
+                return;
+            }
+
+            try {
+                const btn = document.getElementById('batch-handle-btn');
+                const statusDiv = document.getElementById('batch-handle-status');
+                btn.textContent = '处理中...';
+                btn.disabled = true;
+                statusDiv.innerHTML = '<div class="empty" style="padding:20px;"><div class="empty-icon">⏳</div>正在处理，请稍候...</div>';
+
+                const result = await apiCall('/alerts/batch-handle', 'POST', {
+                    alert_ids: ids,
+                    handled_by: handledBy,
+                    handled_note: handledNote,
+                    disposal_result: disposalResult
+                });
+
+                statusDiv.innerHTML = `
+                    <div class="card" style="background:#f6ffed;border:1px solid #b7eb8f;margin-bottom:0;">
+                        <p style="font-size:13px;color:#389e0d;">
+                            ✅ 批量处理完成！成功处理 ${result.processed} 条，跳过 ${result.skipped} 条
+                        </p>
+                        ${result.skipped > 0 ? `<p style="font-size:12px;color:#8c8c8c;margin-top:4px;">跳过的ID: ${result.skipped_ids.join(', ')}</p>` : ''}
+                    </div>
+                `;
+
+                btn.textContent = '处理完成';
+                setTimeout(() => {
+                    closeModal();
+                    document.querySelectorAll('.alert-checkbox').forEach(cb => cb.checked = false);
+                    updateSelectedCount();
+                    if (currentPage === 'dashboard') loadDashboard();
+                    else if (currentPage === 'alerts') loadAlerts();
+                }, 1500);
+            } catch (e) {
+                const statusDiv = document.getElementById('batch-handle-status');
+                statusDiv.innerHTML = `
+                    <div class="card" style="background:#fff1f0;border:1px solid #ffa39e;margin-bottom:0;">
+                        <p style="font-size:13px;color:#cf1322;">❌ 处理失败: ${e.message}</p>
+                    </div>
+                `;
+                document.getElementById('batch-handle-btn').textContent = '重新提交';
+                document.getElementById('batch-handle-btn').disabled = false;
+            }
+        }
+
+        let currentRespTab = 'customer';
+
+        async function loadDashboardResp() {
+            await loadRespSummary();
+            switchTab(currentRespTab, true);
+        }
+
+        async function loadRespSummary() {
+            try {
+                const data = await apiCall('/alerts/dashboard/summary');
+                const grid = document.getElementById('resp-summary-grid');
+                grid.innerHTML = `
+                    <div class="stat-card red"><div class="stat-value">${data.total_pending}</div><div class="stat-label">待处理总数</div></div>
+                    <div class="stat-card green"><div class="stat-value">${data.total_handled}</div><div class="stat-label">已处理总数</div></div>
+                    <div class="stat-card orange"><div class="stat-value">${data.avg_processing_minutes > 0 ? data.avg_processing_minutes.toFixed(1) : '0.0'}</div><div class="stat-label">平均处理时长(分钟)</div></div>
+                    <div class="stat-card red"><div class="stat-value">${data.total_temp_abnormal}</div><div class="stat-label">温控异常数</div></div>
+                    <div class="stat-card red"><div class="stat-value">${data.total_overdue}</div><div class="stat-label">超期未回数</div></div>
+                    <div class="stat-card purple"><div class="stat-value">${data.total_complaint}</div><div class="stat-label">客户投诉数</div></div>
+                    <div class="stat-card cyan"><div class="stat-value">${data.total_duplicate}</div><div class="stat-label">重复出库数</div></div>
+                `;
+            } catch (e) {
+                console.error(e);
+                document.getElementById('resp-summary-grid').innerHTML = '<div class="empty">加载失败</div>';
+            }
+        }
+
+        function switchTab(tab, force = false) {
+            if (!force && currentRespTab === tab) return;
+            currentRespTab = tab;
+
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.tab === tab);
+            });
+
+            loadRespData(tab);
+        }
+
+        async function loadRespData(tab) {
+            const container = document.getElementById('resp-table-container');
+            container.innerHTML = '<div class="empty"><div class="empty-icon">⏳</div>加载中...</div>';
+
+            const apiMap = {
+                'customer': '/alerts/dashboard/by-customer',
+                'route': '/alerts/dashboard/by-route',
+                'box': '/alerts/dashboard/by-box',
+                'type': '/alerts/dashboard/by-type'
+            };
+
+            const titleMap = {
+                'customer': '客户',
+                'route': '线路',
+                'box': '箱号',
+                'type': '异常类型'
+            };
+
+            try {
+                const data = await apiCall(apiMap[tab]);
+                renderRespTable(data, titleMap[tab]);
+            } catch (e) {
+                container.innerHTML = `<div class="empty"><div class="empty-icon">❌</div>加载失败: ${e.message}</div>`;
+            }
+        }
+
+        function renderRespTable(data, dimensionLabel) {
+            const container = document.getElementById('resp-table-container');
+
+            if (data.length === 0) {
+                container.innerHTML = '<div class="empty"><div class="empty-icon">📊</div>暂无数据</div>';
+                return;
+            }
+
+            container.innerHTML = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${dimensionLabel}</th>
+                            <th>待处理数量</th>
+                            <th>平均处理时长(分钟)</th>
+                            <th>最近异常箱号</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(item => `
+                            <tr>
+                                <td><strong>${item.dimension_value}</strong></td>
+                                <td><span class="tag ${item.pending_count > 0 ? 'tag-danger' : 'tag-success'}">${item.pending_count}</span></td>
+                                <td>${item.avg_processing_minutes > 0 ? item.avg_processing_minutes.toFixed(1) : '0.0'}</td>
+                                <td>
+                                    ${item.latest_box_no ? `<a href="javascript:viewBoxTimeline('${item.latest_box_no}')" style="color:#1890ff;text-decoration:none;">📦 ${item.latest_box_no}</a>` : '-'}
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
         }
 
         loadDashboard();

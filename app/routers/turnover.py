@@ -110,11 +110,11 @@ def get_handover_records(box_no: str, db: Session = Depends(get_db)):
 @router.get("/timeline/{box_no}", summary="箱体全链路时间线")
 def get_box_timeline(box_no: str, db: Session = Depends(get_db)):
     """
-    获取箱体全链路时间线：出库、签收、温度、投诉、回仓、提醒等事件串联
+    获取箱体全链路时间线：出库、签收、温度、投诉、回仓、提醒、处置等事件串联
     """
     from app.models import (
         Box, HandoverRecord, TemperatureRecord,
-        Complaint, Alert, TurnoverTask
+        Complaint, Alert, TurnoverTask, AlertDisposal
     )
 
     box = db.query(Box).filter(Box.box_no == box_no).first()
@@ -172,15 +172,43 @@ def get_box_timeline(box_no: str, db: Session = Depends(get_db)):
     for a in alerts:
         sev_map = {"high": "danger", "warning": "warning", "low": "info"}
         status_text = "已处理" if a.is_handled else ("已读" if a.is_read else "待处理")
+        handled_info = ""
+        if a.is_handled:
+            handled_info = f"，处理人: {a.handled_by or '-'}，处理时间: {a.handled_at.strftime('%Y-%m-%d %H:%M') if a.handled_at else '-'}"
         events.append({
             "event_type": f"提醒-{a.alert_type}",
             "event_time": a.created_at,
             "icon": "🔔",
             "title": f"{a.alert_type} [{status_text}]",
-            "description": f"责任节点: {a.responsible_node}，建议动作: {a.suggested_action}，推送给: {a.target_roles}",
+            "description": f"责任节点: {a.responsible_node}，建议动作: {a.suggested_action}，推送给: {a.target_roles}{handled_info}",
             "severity": sev_map.get(a.severity, "info"),
-            "data": {"id": a.id, "alert_no": a.alert_no, "alert_type": a.alert_type, "is_handled": a.is_handled, "is_read": a.is_read, "last_pushed_at": a.last_pushed_at.isoformat() if a.last_pushed_at else None}
+            "data": {"id": a.id, "alert_no": a.alert_no, "alert_type": a.alert_type, "is_handled": a.is_handled, "is_read": a.is_read, "last_pushed_at": a.last_pushed_at.isoformat() if a.last_pushed_at else None, "handled_by": a.handled_by, "handled_at": a.handled_at.isoformat() if a.handled_at else None}
         })
+
+    alert_ids = [a.id for a in alerts]
+    if alert_ids:
+        disposals = db.query(AlertDisposal).filter(
+            AlertDisposal.alert_id.in_(alert_ids)
+        ).order_by(AlertDisposal.disposed_at.asc()).all()
+        for d in disposals:
+            type_text = "处置" if d.disposal_type == "handle" else "转派"
+            icon = "✏️" if d.disposal_type == "handle" else "➡️"
+            desc_parts = [f"操作人: {d.operator_name}({d.operator_role})"]
+            if d.disposal_result:
+                desc_parts.append(f"结果: {d.disposal_result}")
+            if d.disposal_note:
+                desc_parts.append(f"备注: {d.disposal_note}")
+            if d.assigned_to_name:
+                desc_parts.append(f"转派给: {d.assigned_to_name}({d.assigned_to_role})")
+            events.append({
+                "event_type": f"提醒{type_text}",
+                "event_time": d.disposed_at,
+                "icon": icon,
+                "title": f"提醒{type_text}: {d.disposal_result or type_text}",
+                "description": "，".join(desc_parts),
+                "severity": "info",
+                "data": {"id": d.id, "alert_id": d.alert_id, "disposal_type": d.disposal_type, "operator_name": d.operator_name, "operator_role": d.operator_role, "disposal_note": d.disposal_note, "disposal_result": d.disposal_result, "assigned_to_name": d.assigned_to_name, "assigned_to_role": d.assigned_to_role}
+            })
 
     tasks = db.query(TurnoverTask).filter(
         TurnoverTask.box_no == box_no

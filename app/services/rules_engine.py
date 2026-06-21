@@ -7,6 +7,7 @@ from app.models import (
     Box, TurnoverTask, HandoverRecord, TemperatureRecord,
     Complaint, Alert, SystemConfig, CustomerTurnoverConfig, AlertRecipient
 )
+from app.services.notification import NotificationService
 
 
 def generate_no(prefix: str) -> str:
@@ -127,6 +128,7 @@ def get_active_tasks_by_box(db: Session, box_no: str) -> List[TurnoverTask]:
 
 def run_overdue_check(db: Session) -> List[Alert]:
     alerts = []
+    notification = NotificationService(db)
     active_tasks = db.query(TurnoverTask).filter(
         TurnoverTask.status.in_(["outbound", "in_transit", "signed"])
     ).all()
@@ -150,6 +152,7 @@ def run_overdue_check(db: Session) -> List[Alert]:
                     extra_info=f"客户: {task.customer}, 线路: {task.route}, 预计归还: {task.expected_return_date.strftime('%Y-%m-%d')}",
                     target_roles="dispatch,customer_service"
                 )
+                notification.push_alert(alert)
                 alerts.append(alert)
 
     db.commit()
