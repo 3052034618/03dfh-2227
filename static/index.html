@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>低温箱周转异常监控系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #333; }
+        .header { background: #1890ff; color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .nav { background: white; border-radius: 8px; padding: 12px; margin-bottom: 20px; display: flex; gap: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .nav-btn { padding: 8px 20px; border: none; background: #f5f5f5; border-radius: 6px; cursor: pointer; font-size: 14px; transition: all 0.2s; }
+        .nav-btn:hover { background: #e6f7ff; }
+        .nav-btn.active { background: #1890ff; color: white; }
+        .page { display: none; }
+        .page.active { display: block; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .card h2 { font-size: 16px; margin-bottom: 16px; color: #262626; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+        .stat-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; }
+        .stat-card.blue { background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%); }
+        .stat-card.green { background: linear-gradient(135deg, #52c41a 0%, #389e0d 100%); }
+        .stat-card.orange { background: linear-gradient(135deg, #fa8c16 0%, #d46b08 100%); }
+        .stat-card.red { background: linear-gradient(135deg, #ff4d4f 0%, #cf1322 100%); }
+        .stat-value { font-size: 32px; font-weight: bold; margin-bottom: 4px; }
+        .stat-label { font-size: 14px; opacity: 0.9; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f0f0f0; }
+        th { background: #fafafa; font-weight: 500; color: #595959; }
+        tr:hover { background: #fafafa; }
+        .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+        .tag-warning { background: #fff7e6; color: #fa8c16; }
+        .tag-danger { background: #fff1f0; color: #ff4d4f; }
+        .tag-success { background: #f6ffed; color: #52c41a; }
+        .tag-info { background: #e6f7ff; color: #1890ff; }
+        .tag-default { background: #f5f5f5; color: #595959; }
+        .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+        .btn-primary { background: #1890ff; color: white; }
+        .btn-primary:hover { background: #40a9ff; }
+        .btn-success { background: #52c41a; color: white; }
+        .btn-danger { background: #ff4d4f; color: white; }
+        .btn-default { background: #f5f5f5; color: #333; }
+        .btn-default:hover { background: #e8e8e8; }
+        .form-row { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+        .form-item { flex: 1; min-width: 200px; }
+        .form-item label { display: block; margin-bottom: 6px; font-size: 14px; color: #595959; }
+        .form-item input, .form-item select { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; }
+        .form-item input:focus, .form-item select:focus { outline: none; border-color: #1890ff; }
+        .alert-item { border: 1px solid #f0f0f0; border-radius: 8px; padding: 16px; margin-bottom: 12px; }
+        .alert-item.unhandled { border-left: 4px solid #ff4d4f; }
+        .alert-item.handled { border-left: 4px solid #52c41a; opacity: 0.7; }
+        .alert-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+        .alert-title { font-weight: 500; font-size: 15px; }
+        .alert-content { color: #595959; font-size: 13px; line-height: 1.6; white-space: pre-line; }
+        .alert-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f0; }
+        .alert-time { color: #8c8c8c; font-size: 12px; }
+        .empty { text-align: center; padding: 40px; color: #8c8c8c; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>❄️ 低温箱周转异常监控系统</h1>
+        <span style="font-size: 13px; opacity: 0.9;">运营管理后台</span>
+    </div>
+
+    <div class="container">
+        <div class="nav">
+            <button class="nav-btn active" onclick="showPage('dashboard')">仪表盘</button>
+            <button class="nav-btn" onclick="showPage('alerts')">提醒中心</button>
+            <button class="nav-btn" onclick="showPage('boxes')">箱体管理</button>
+            <button class="nav-btn" onclick="showPage('tasks')">周转任务</button>
+            <button class="nav-btn" onclick="showPage('config')">系统配置</button>
+        </div>
+
+        <div id="page-dashboard" class="page active">
+            <div class="stats-grid">
+                <div class="stat-card blue">
+                    <div class="stat-value" id="stat-total">--</div>
+                    <div class="stat-label">箱体总数</div>
+                </div>
+                <div class="stat-card green">
+                    <div class="stat-value" id="stat-idle">--</div>
+                    <div class="stat-label">空闲箱体</div>
+                </div>
+                <div class="stat-card orange">
+                    <div class="stat-value" id="stat-inuse">--</div>
+                    <div class="stat-label">使用中</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-value" id="stat-overdue">--</div>
+                    <div class="stat-label">超期未回</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-tasks">--</div>
+                    <div class="stat-label">在途任务</div>
+                </div>
+                <div class="stat-card red">
+                    <div class="stat-value" id="stat-alerts">--</div>
+                    <div class="stat-label">待处理提醒</div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 20px;">
+                <h2>快捷操作</h2>
+                <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                    <button class="btn btn-primary" onclick="runCheck()">立即执行规则检查</button>
+                    <button class="btn btn-default" onclick="loadDashboard()">刷新数据</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>最新提醒</h2>
+                <div id="latest-alerts"></div>
+            </div>
+        </div>
+
+        <div id="page-alerts" class="page">
+            <div class="card">
+                <h2>提醒中心</h2>
+                <div class="form-row">
+                    <div class="form-item" style="min-width: 150px; flex: none;">
+                        <label>状态筛选</label>
+                        <select id="alert-filter" onchange="loadAlerts()">
+                            <option value="">全部</option>
+                            <option value="unhandled">待处理</option>
+                            <option value="handled">已处理</option>
+                        </select>
+                    </div>
+                    <div class="form-item" style="min-width: 150px; flex: none;">
+                        <label>角色筛选</label>
+                        <select id="alert-role" onchange="loadAlerts()">
+                            <option value="">全部角色</option>
+                            <option value="dispatch">调度</option>
+                            <option value="warehouse">仓库</option>
+                            <option value="customer_service">客服</option>
+                            <option value="manager">管理人员</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="alerts-list"></div>
+            </div>
+        </div>
+
+        <div id="page-boxes" class="page">
+            <div class="card">
+                <h2>箱体管理</h2>
+                <div class="form-row">
+                    <div class="form-item" style="min-width: 150px; flex: none;">
+                        <label>状态筛选</label>
+                        <select id="box-status" onchange="loadBoxes()">
+                            <option value="">全部</option>
+                            <option value="idle">空闲</option>
+                            <option value="outbound">出库</option>
+                            <option value="in_transit">运输中</option>
+                            <option value="signed">已签收</option>
+                            <option value="overdue">超期</option>
+                            <option value="temp_abnormal">温控异常</option>
+                        </select>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>箱号</th>
+                            <th>状态</th>
+                            <th>当前客户</th>
+                            <th>当前线路</th>
+                            <th>更新时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="boxes-table"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="page-tasks" class="page">
+            <div class="card">
+                <h2>周转任务</h2>
+                <div class="form-row">
+                    <div class="form-item" style="min-width: 150px; flex: none;">
+                        <label>状态筛选</label>
+                        <select id="task-status" onchange="loadTasks()">
+                            <option value="">全部</option>
+                            <option value="outbound">出库</option>
+                            <option value="in_transit">运输中</option>
+                            <option value="signed">已签收</option>
+                            <option value="returned">已回仓</option>
+                        </select>
+                    </div>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>任务编号</th>
+                            <th>箱号</th>
+                            <th>客户</th>
+                            <th>线路</th>
+                            <th>预计归还</th>
+                            <th>状态</th>
+                            <th>是否超期</th>
+                            <th>创建时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tasks-table"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="page-config" class="page">
+            <div class="card">
+                <h2>系统参数配置</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>配置项</th>
+                            <th>配置值</th>
+                            <th>说明</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="config-table"></tbody>
+                </table>
+                <div style="margin-top: 16px;">
+                    <button class="btn btn-primary" onclick="showAddConfig()">新增配置</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>客户周转周期配置</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>客户名称</th>
+                            <th>周转天数</th>
+                            <th>说明</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="customer-config-table"></tbody>
+                </table>
+                <div style="margin-top: 16px;">
+                    <button class="btn btn-primary" onclick="showAddCustomerConfig()">新增客户配置</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>提醒接收人配置</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>姓名</th>
+                            <th>角色</th>
+                            <th>电话</th>
+                            <th>邮箱</th>
+                            <th>接收提醒类型</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recipient-table"></tbody>
+                </table>
+                <div style="margin-top: 16px;">
+                    <button class="btn btn-primary" onclick="showAddRecipient()">新增接收人</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('page-' + page).classList.add('active');
+            event.target.classList.add('active');
+
+            if (page === 'dashboard') loadDashboard();
+            else if (page === 'alerts') loadAlerts();
+            else if (page === 'boxes') loadBoxes();
+            else if (page === 'tasks') loadTasks();
+            else if (page === 'config') { loadConfigs(); loadCustomerConfigs(); loadRecipients(); }
+        }
+
+        async function apiCall(url, method = 'GET', data = null) {
+            const options = { method, headers: { 'Content-Type': 'application/json' } };
+            if (data) options.body = JSON.stringify(data);
+            const res = await fetch(API_BASE + url, options);
+            return await res.json();
+        }
+
+        function formatTime(str) {
+            if (!str) return '-';
+            return new Date(str).toLocaleString('zh-CN');
+        }
+
+        function getStatusTag(status) {
+            const map = {
+                'idle': ['空闲', 'tag-success'],
+                'outbound': ['出库', 'tag-info'],
+                'in_transit': ['运输中', 'tag-info'],
+                'signed': ['已签收', 'tag-warning'],
+                'returned': ['已回仓', 'tag-default'],
+                'overdue': ['超期', 'tag-danger'],
+                'temp_abnormal': ['温控异常', 'tag-danger']
+            };
+            const [text, cls] = map[status] || [status, 'tag-default'];
+            return `<span class="tag ${cls}">${text}</span>`;
+        }
+
+        function getSeverityTag(severity) {
+            const map = {
+                'low': ['低', 'tag-info'],
+                'warning': ['警告', 'tag-warning'],
+                'high': ['严重', 'tag-danger']
+            };
+            const [text, cls] = map[severity] || [severity, 'tag-default'];
+            return `<span class="tag ${cls}">${text}</span>`;
+        }
+
+        async function loadDashboard() {
+            const data = await apiCall('/admin/dashboard');
+            document.getElementById('stat-total').textContent = data.total_boxes;
+            document.getElementById('stat-idle').textContent = data.idle_boxes;
+            document.getElementById('stat-inuse').textContent = data.in_use_boxes;
+            document.getElementById('stat-overdue').textContent = data.overdue_boxes;
+            document.getElementById('stat-tasks').textContent = data.active_tasks;
+            document.getElementById('stat-alerts').textContent = data.unhandled_alerts;
+
+            const alerts = await apiCall('/alerts?is_handled=false');
+            const container = document.getElementById('latest-alerts');
+            if (alerts.length === 0) {
+                container.innerHTML = '<div class="empty">暂无待处理提醒</div>';
+            } else {
+                container.innerHTML = alerts.slice(0, 5).map(a => renderAlertItem(a)).join('');
+            }
+        }
+
+        function renderAlertItem(alert) {
+            const cls = alert.is_handled ? 'handled' : 'unhandled';
+            return `
+                <div class="alert-item ${cls}">
+                    <div class="alert-header">
+                        <div>
+                            <span class="alert-title">${alert.alert_type}</span>
+                            ${getSeverityTag(alert.severity)}
+                            ${alert.box_no ? `<span class="tag tag-info" style="margin-left: 8px;">${alert.box_no}</span>` : ''}
+                        </div>
+                        <span class="tag tag-default">责任: ${alert.responsible_node}</span>
+                    </div>
+                    <div class="alert-content">${alert.content}</div>
+                    <div class="alert-footer">
+                        <span class="alert-time">${formatTime(alert.created_at)}</span>
+                        <div>
+                            ${!alert.is_handled ? `<button class="btn btn-success" onclick="handleAlert(${alert.id})">标记处理</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function loadAlerts() {
+            const filter = document.getElementById('alert-filter').value;
+            const role = document.getElementById('alert-role').value;
+            let url = '/alerts?';
+            if (filter === 'unhandled') url += 'is_handled=false&';
+            else if (filter === 'handled') url += 'is_handled=true&';
+            if (role) url += `role=${role}&`;
+
+            const alerts = await apiCall(url.replace(/&$/, ''));
+            const container = document.getElementById('alerts-list');
+            if (alerts.length === 0) {
+                container.innerHTML = '<div class="empty">暂无提醒数据</div>';
+            } else {
+                container.innerHTML = alerts.map(a => renderAlertItem(a)).join('');
+            }
+        }
+
+        async function handleAlert(id) {
+            await apiCall(`/alerts/${id}/handle`, 'PUT');
+            loadAlerts();
+            loadDashboard();
+        }
+
+        async function runCheck() {
+            const result = await apiCall('/alerts/check/run', 'POST');
+            alert(`规则检查完成，新增 ${result.new_alerts} 条提醒`);
+            loadDashboard();
+        }
+
+        async function loadBoxes() {
+            const status = document.getElementById('box-status').value;
+            let url = '/admin/boxes';
+            if (status) url += `?status=${status}`;
+            const boxes = await apiCall(url);
+            const tbody = document.getElementById('boxes-table');
+            if (boxes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无数据</td></tr>';
+            } else {
+                tbody.innerHTML = boxes.map(b => `
+                    <tr>
+                        <td>${b.box_no}</td>
+                        <td>${getStatusTag(b.status)}</td>
+                        <td>${b.current_customer || '-'}</td>
+                        <td>${b.current_route || '-'}</td>
+                        <td>${formatTime(b.updated_at || b.created_at)}</td>
+                        <td><button class="btn btn-default" onclick="viewBoxDetail('${b.box_no}')">详情</button></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function viewBoxDetail(boxNo) {
+            const records = await apiCall(`/turnover/handover/${boxNo}`);
+            const recordText = records.map(r => 
+                `${formatTime(r.recorded_at)} - ${r.record_type} - ${r.location || '-'} - ${r.operator || '-'}`
+            ).join('\n') || '暂无记录';
+            alert(`箱号: ${boxNo}\n\n交接记录:\n${recordText}`);
+        }
+
+        async function loadTasks() {
+            const status = document.getElementById('task-status').value;
+            let url = '/admin/tasks';
+            if (status) url += `?status=${status}`;
+            const tasks = await apiCall(url);
+            const tbody = document.getElementById('tasks-table');
+            if (tasks.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="empty">暂无数据</td></tr>';
+            } else {
+                tbody.innerHTML = tasks.map(t => `
+                    <tr>
+                        <td>${t.task_no}</td>
+                        <td>${t.box_no}</td>
+                        <td>${t.customer}</td>
+                        <td>${t.route}</td>
+                        <td>${formatTime(t.expected_return_date)}</td>
+                        <td>${getStatusTag(t.status)}</td>
+                        <td>${t.is_overdue ? '<span class="tag tag-danger">是</span>' : '<span class="tag tag-success">否</span>'}</td>
+                        <td>${formatTime(t.created_at)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function loadConfigs() {
+            const configs = await apiCall('/admin/configs');
+            const tbody = document.getElementById('config-table');
+            tbody.innerHTML = Object.entries(configs).map(([key, value]) => `
+                <tr>
+                    <td>${key}</td>
+                    <td><input type="text" value="${value}" id="config-val-${key}" style="width: 100px; padding: 4px 8px; border: 1px solid #d9d9d9; border-radius: 4px;"></td>
+                    <td>${value}</td>
+                    <td>
+                        <button class="btn btn-primary" onclick="saveConfig('${key}')">保存</button>
+                        <button class="btn btn-danger" onclick="deleteConfig('${key}')">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function saveConfig(key) {
+            const value = document.getElementById('config-val-' + key).value;
+            await apiCall('/admin/configs', 'POST', { config_key: key, config_value: value });
+            alert('保存成功');
+            loadConfigs();
+        }
+
+        async function deleteConfig(key) {
+            if (confirm('确定删除此配置？')) {
+                await apiCall('/admin/configs/' + key, 'DELETE');
+                loadConfigs();
+            }
+        }
+
+        function showAddConfig() {
+            const key = prompt('请输入配置项名称:');
+            if (!key) return;
+            const value = prompt('请输入配置值:');
+            if (value === null) return;
+            const desc = prompt('请输入说明(可选):') || '';
+            apiCall('/admin/configs', 'POST', { config_key: key, config_value: value, description: desc }).then(() => {
+                alert('新增成功');
+                loadConfigs();
+            });
+        }
+
+        async function loadCustomerConfigs() {
+            const configs = await apiCall('/admin/customer-configs');
+            const tbody = document.getElementById('customer-config-table');
+            if (configs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty">暂无数据</td></tr>';
+            } else {
+                tbody.innerHTML = configs.map(c => `
+                    <tr>
+                        <td>${c.customer_name}</td>
+                        <td><input type="number" value="${c.turnover_days}" id="cust-days-${c.id}" style="width: 80px; padding: 4px 8px; border: 1px solid #d9d9d9; border-radius: 4px;"></td>
+                        <td>${c.description || '-'}</td>
+                        <td>
+                            <button class="btn btn-primary" onclick="saveCustomerConfig('${c.customer_name}', ${c.id})">保存</button>
+                            <button class="btn btn-danger" onclick="deleteCustomerConfig('${c.customer_name}')">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function saveCustomerConfig(name, id) {
+            const days = parseInt(document.getElementById('cust-days-' + id).value);
+            await apiCall('/admin/customer-configs', 'POST', { customer_name: name, turnover_days: days });
+            alert('保存成功');
+            loadCustomerConfigs();
+        }
+
+        async function deleteCustomerConfig(name) {
+            if (confirm('确定删除此客户配置？')) {
+                await apiCall('/admin/customer-configs/' + name, 'DELETE');
+                loadCustomerConfigs();
+            }
+        }
+
+        function showAddCustomerConfig() {
+            const name = prompt('请输入客户名称:');
+            if (!name) return;
+            const days = parseInt(prompt('请输入周转天数:', '7'));
+            if (isNaN(days)) return;
+            const desc = prompt('请输入说明(可选):') || '';
+            apiCall('/admin/customer-configs', 'POST', { customer_name: name, turnover_days: days, description: desc }).then(() => {
+                alert('新增成功');
+                loadCustomerConfigs();
+            });
+        }
+
+        async function loadRecipients() {
+            const recipients = await apiCall('/admin/recipients');
+            const tbody = document.getElementById('recipient-table');
+            if (recipients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无数据</td></tr>';
+            } else {
+                tbody.innerHTML = recipients.map(r => `
+                    <tr>
+                        <td>${r.name}</td>
+                        <td>${r.role}</td>
+                        <td>${r.phone || '-'}</td>
+                        <td>${r.email || '-'}</td>
+                        <td>${r.alert_types}</td>
+                        <td>${r.is_active ? '<span class="tag tag-success">启用</span>' : '<span class="tag tag-default">停用</span>'}</td>
+                        <td>
+                            <button class="btn btn-danger" onclick="deleteRecipient(${r.id})">删除</button>
+                        </td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        async function deleteRecipient(id) {
+            if (confirm('确定删除此接收人？')) {
+                await apiCall('/admin/recipients/' + id, 'DELETE');
+                loadRecipients();
+            }
+        }
+
+        function showAddRecipient() {
+            const name = prompt('请输入姓名:');
+            if (!name) return;
+            const role = prompt('请输入角色 (dispatch/warehouse/customer_service/manager):', 'dispatch');
+            if (!role) return;
+            const phone = prompt('请输入电话(可选):') || '';
+            const email = prompt('请输入邮箱(可选):') || '';
+            const alertTypes = prompt('请输入接收的提醒类型，多个用逗号分隔 (超期未回,同箱重复出库,温控异常,客户投诉,客户高占用):', '超期未回,同箱重复出库,温控异常,客户投诉,客户高占用');
+            if (!alertTypes) return;
+
+            apiCall('/admin/recipients', 'POST', {
+                name, role, phone, email, alert_types: alertTypes, is_active: true
+            }).then(() => {
+                alert('新增成功');
+                loadRecipients();
+            });
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>
