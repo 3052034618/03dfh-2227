@@ -212,6 +212,29 @@ def get_box_timeline(box_no: str, db: Session = Depends(get_db)):
                 "data": {"id": d.id, "alert_id": d.alert_id, "disposal_type": d.disposal_type, "operator_name": d.operator_name, "operator_role": d.operator_role, "operator_from_name": d.operator_from_name, "operator_from_role": d.operator_from_role, "disposal_note": d.disposal_note, "disposal_result": d.disposal_result, "assigned_to_name": d.assigned_to_name, "assigned_to_role": d.assigned_to_role}
             })
 
+    if alert_ids:
+        from app.models import AlertComment
+        comments = db.query(AlertComment).filter(
+            AlertComment.alert_id.in_(alert_ids)
+        ).order_by(AlertComment.created_at.asc()).all()
+        for c in comments:
+            icon = "💬" if c.comment_type == "comment" else "📎"
+            type_text = "评论" if c.comment_type == "comment" else "附件"
+            desc_parts = [f"操作人: {c.operator_name}({c.operator_role})"]
+            if c.content:
+                desc_parts.append(f"内容: {c.content}")
+            if c.attachment_name:
+                desc_parts.append(f"附件: {c.attachment_name}")
+            events.append({
+                "event_type": f"提醒{type_text}",
+                "event_time": c.created_at,
+                "icon": icon,
+                "title": f"提醒{type_text}",
+                "description": "，".join(desc_parts),
+                "severity": "info",
+                "data": {"id": c.id, "alert_id": c.alert_id, "comment_type": c.comment_type, "operator_name": c.operator_name, "operator_role": c.operator_role, "content": c.content, "attachment_name": c.attachment_name, "attachment_url": c.attachment_url, "attachment_size": c.attachment_size}
+            })
+
     tasks = db.query(TurnoverTask).filter(
         TurnoverTask.box_no == box_no
     ).order_by(TurnoverTask.created_at.asc()).all()

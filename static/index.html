@@ -143,6 +143,7 @@
             <button class="nav-btn" onclick="showPage('config', event)">系统配置</button>
             <button class="nav-btn" onclick="showPage('timeline', event)">🔍 箱体时间线</button>
             <button class="nav-btn" onclick="showPage('dashboard-resp', event)">📊 责任节点看板</button>
+            <button class="nav-btn" id="nav-review" onclick="showPage('review', event)">📊 复盘分析</button>
         </div>
 
         <div id="page-dashboard" class="page active">
@@ -209,6 +210,14 @@
                             <option value="warehouse">仓库</option>
                             <option value="customer_service">客服</option>
                             <option value="manager">管理</option>
+                        </select>
+                    </div>
+                    <div class="form-item" style="min-width: 150px; flex: none;">
+                        <label>升级状态</label>
+                        <select id="alert-escalated" onchange="loadAlerts()">
+                            <option value="">全部</option>
+                            <option value="escalated">已升级</option>
+                            <option value="not_escalated">未升级</option>
                         </select>
                     </div>
                 </div>
@@ -383,6 +392,90 @@
                 </div>
             </div>
         </div>
+
+        <div id="page-review" class="page">
+            <div class="card">
+                <div class="card-header">
+                    <h2>📊 复盘分析</h2>
+                </div>
+                <div class="form-row">
+                    <div class="form-item">
+                        <label>客户</label>
+                        <input type="text" id="review-customer" placeholder="客户名称（模糊匹配）">
+                    </div>
+                    <div class="form-item">
+                        <label>线路</label>
+                        <input type="text" id="review-route" placeholder="线路名称（模糊匹配）">
+                    </div>
+                    <div class="form-item">
+                        <label>异常类型</label>
+                        <select id="review-alert-type">
+                            <option value="">全部</option>
+                            <option value="超期未回">超期未回</option>
+                            <option value="温控异常">温控异常</option>
+                            <option value="客户投诉">客户投诉</option>
+                            <option value="同箱重复出库">同箱重复出库</option>
+                            <option value="客户高占用">客户高占用</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-item">
+                        <label>开始日期</label>
+                        <input type="date" id="review-start-date">
+                    </div>
+                    <div class="form-item">
+                        <label>结束日期</label>
+                        <input type="date" id="review-end-date">
+                    </div>
+                    <div class="form-item">
+                        <label>处理状态</label>
+                        <select id="review-is-handled">
+                            <option value="">全部</option>
+                            <option value="unhandled">未处理</option>
+                            <option value="handled">已处理</option>
+                        </select>
+                    </div>
+                    <div class="form-item" style="flex: none; min-width: auto;">
+                        <label>&nbsp;</label>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-primary" onclick="loadReviewData()">🔍 查询</button>
+                            <button class="btn btn-default" onclick="exportReviewCSV()">📥 导出CSV</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>📈 汇总统计</h2>
+                </div>
+                <div class="stats-grid" id="review-summary-grid"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2>📋 异常明细 <span id="review-total" style="font-size: 13px; color: #8c8c8c; font-weight: normal;"></span></h2>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>提醒编号</th>
+                            <th>箱号</th>
+                            <th>异常类型</th>
+                            <th>严重程度</th>
+                            <th>责任节点</th>
+                            <th>当前归属</th>
+                            <th>是否已处理</th>
+                            <th>处理人</th>
+                            <th>创建时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="review-table-body"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <div id="modal-root"></div>
@@ -409,6 +502,7 @@
             else if (page === 'config') { loadConfigs(); loadCustomerConfigs(); loadRecipients(); }
             else if (page === 'timeline') { const q = document.getElementById('timeline-boxno').value; if (q) loadTimeline(); }
             else if (page === 'dashboard-resp') loadDashboardResp();
+            else if (page === 'review') { initReviewPage(); loadReviewData(); }
         }
 
         function pageName(p) { return ''; }
@@ -515,6 +609,7 @@
                             ${!compact ? `<input type="checkbox" class="alert-checkbox" data-id="${alert.id}" data-type="${alert.alert_type}" ${!batchAllowed ? 'disabled' : ''} onchange="updateSelectedCount()">` : ''}
                             <span class="alert-title">${alert.alert_type}</span>
                             ${getSeverityTag(alert.severity)}
+                            ${alert.is_escalated ? '<span class="tag tag-danger">🔺 已升级</span>' : ''}
                             ${!compact && !batchAllowed ? '<span style="font-size:11px;color:#bfbfbf;margin-left:4px;">不支持批量</span>' : ''}
                             ${alert.box_no ? `<span class="tag tag-info" onclick="viewBoxTimeline('${alert.box_no}')" style="cursor:pointer;" title="查看时间线">📦 ${alert.box_no}</span>` : ''}
                             <span class="tag tag-default">责任: ${alert.responsible_node}</span>
@@ -540,11 +635,14 @@
             const filter = document.getElementById('alert-filter').value;
             const role = document.getElementById('alert-role').value;
             const assignedTo = document.getElementById('alert-assigned-to').value;
+            const escalated = document.getElementById('alert-escalated').value;
             let url = '/alerts?';
             if (filter === 'unhandled') url += 'is_handled=false&';
             else if (filter === 'handled') url += 'is_handled=true&';
             if (role) url += `role=${role}&`;
             if (assignedTo) url += `assigned_to=${assignedTo}&`;
+            if (escalated === 'escalated') url += 'is_escalated=true&';
+            else if (escalated === 'not_escalated') url += 'is_escalated=false&';
 
             try {
                 const alerts = await apiCall(url.replace(/&$/, ''));
@@ -679,16 +777,103 @@
                     </div>
                 ` : '';
 
+                const escalationHtml = a.is_escalated ? `
+                    <div style="background:#fff1f0;border:1px solid #ffa39e;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <span style="color:#ff4d4f;font-weight:600;">🔺 已升级</span>
+                            ${a.escalated_to ? `<span class="tag tag-danger">升级至: ${a.escalated_to}</span>` : ''}
+                        </div>
+                        <div style="font-size:13px;color:#595959;">
+                            ${a.escalated_at ? `<p>升级时间: ${formatTime(a.escalated_at)}</p>` : ''}
+                            ${a.escalation_note ? `<p>升级说明: ${a.escalation_note}</p>` : ''}
+                        </div>
+                    </div>
+                ` : '';
+
+                const commentsHtml = `
+                    <div class="disposal-section">
+                        <h4 style="font-size:14px;margin-bottom:8px;color:#262626;">💬 协同评论</h4>
+                        <div id="comments-list" style="margin-bottom:16px;">
+                            <div class="empty" style="padding:20px;">加载中...</div>
+                        </div>
+
+                        <div class="tab-nav" style="margin-bottom:16px;">
+                            <button class="tab-btn active" data-comment-tab="comment" onclick="switchCommentTab('comment')">💬 发表评论</button>
+                            <button class="tab-btn" data-comment-tab="attachment" onclick="switchCommentTab('attachment')">📎 上传附件</button>
+                        </div>
+
+                        <div id="comment-tab-comment">
+                            <div class="action-area" style="margin-bottom:0;">
+                                <div class="form-row">
+                                    <div class="form-item">
+                                        <label>操作人姓名</label>
+                                        <input type="text" id="comment-operator-name" placeholder="请输入操作人姓名">
+                                    </div>
+                                    <div class="form-item">
+                                        <label>操作人角色</label>
+                                        <select id="comment-operator-role">${roleOptions}</select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-item">
+                                        <label>评论内容</label>
+                                        <textarea id="comment-content" rows="3" placeholder="请输入评论内容"></textarea>
+                                    </div>
+                                </div>
+                                <div style="display:flex;justify-content:flex-end;">
+                                    <button class="btn btn-primary" onclick="submitComment(${a.id})">发表评论</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="comment-tab-attachment" style="display:none;">
+                            <div class="action-area" style="margin-bottom:0;">
+                                <div class="form-row">
+                                    <div class="form-item">
+                                        <label>操作人姓名</label>
+                                        <input type="text" id="attachment-operator-name" placeholder="请输入操作人姓名">
+                                    </div>
+                                    <div class="form-item">
+                                        <label>操作人角色</label>
+                                        <select id="attachment-operator-role">${roleOptions}</select>
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-item">
+                                        <label>附件名</label>
+                                        <input type="text" id="attachment-name" placeholder="请输入附件名">
+                                    </div>
+                                    <div class="form-item">
+                                        <label>附件大小(字节)</label>
+                                        <input type="number" id="attachment-size" placeholder="请输入附件大小">
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-item">
+                                        <label>附件URL</label>
+                                        <input type="text" id="attachment-url" placeholder="请输入附件URL">
+                                    </div>
+                                </div>
+                                <div style="display:flex;justify-content:flex-end;">
+                                    <button class="btn btn-primary" onclick="submitAttachment(${a.id})">上传</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
                 const html = `
                     <div style="display:flex;flex-direction:column;gap:16px;">
                         <div>
                             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
                                 <span style="font-size:18px;font-weight:600;">${a.alert_type}</span>
                                 ${getSeverityTag(a.severity)}
+                                ${a.is_escalated ? '<span class="tag tag-danger">🔺 已升级</span>' : ''}
                                 ${a.box_no ? `<span class="tag tag-info" onclick="closeModal();viewBoxTimeline('${a.box_no}')" style="cursor:pointer;">📦 ${a.box_no}</span>` : ''}
                                 <span class="tag tag-default">责任节点: ${a.responsible_node}</span>
                                 ${a.is_handled ? '<span class="tag tag-success">已处理</span>' : (a.is_read ? '<span class="tag tag-warning">已读</span>' : '<span class="tag tag-danger">待处理</span>')}
                             </div>
+                            ${escalationHtml}
                             <div class="alert-content">${a.content}</div>
                         </div>
 
@@ -701,6 +886,8 @@
                             <h4 style="font-size:14px;margin-bottom:8px;color:#262626;">📝 处置记录（${disposals.length} 条）</h4>
                             ${disposalsHtml}
                         </div>
+
+                        ${commentsHtml}
 
                         ${!a.is_handled ? `
                             <div class="disposal-section">
@@ -718,7 +905,122 @@
                 `;
 
                 showModal(`提醒详情 - ${a.alert_no}`, html);
+                loadComments(alertId);
             } catch (e) { alert('加载失败: ' + e.message); }
+        }
+
+        function switchCommentTab(tab) {
+            document.querySelectorAll('[data-comment-tab]').forEach(b => {
+                b.classList.toggle('active', b.dataset.commentTab === tab);
+            });
+            document.getElementById('comment-tab-comment').style.display = tab === 'comment' ? 'block' : 'none';
+            document.getElementById('comment-tab-attachment').style.display = tab === 'attachment' ? 'block' : 'none';
+        }
+
+        async function loadComments(alertId) {
+            try {
+                const comments = await apiCall(`/alerts/${alertId}/comments`);
+                const container = document.getElementById('comments-list');
+                if (!container) return;
+
+                if (comments.length === 0) {
+                    container.innerHTML = '<div class="empty" style="padding:20px;">暂无评论</div>';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <table class="push-table" style="width:100%;">
+                        <thead>
+                            <tr><th>时间</th><th>操作人</th><th>类型</th><th>内容</th></tr>
+                        </thead>
+                        <tbody>
+                            ${comments.map(c => `
+                                <tr>
+                                    <td style="color:#8c8c8c;font-size:12px;">${formatTime(c.created_at)}</td>
+                                    <td><strong>${c.operator_name}</strong>${c.operator_role ? ` (${c.operator_role})` : ''}</td>
+                                    <td>${c.comment_type === 'comment' ? '<span class="tag tag-info">💬 评论</span>' : '<span class="tag tag-purple">📎 附件</span>'}</td>
+                                    <td>
+                                        ${c.comment_type === 'comment' 
+                                            ? c.content 
+                                            : `<a href="${c.attachment_url}" target="_blank" style="color:#1890ff;text-decoration:none;">📎 ${c.attachment_name}</a>${c.attachment_size ? ` <span style="color:#8c8c8c;font-size:11px;">(${c.attachment_size} 字节)</span>` : ''}`
+                                        }
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+            } catch (e) {
+                const container = document.getElementById('comments-list');
+                if (container) {
+                    container.innerHTML = `<div class="empty" style="padding:20px;color:#ff4d4f;">加载评论失败: ${e.message}</div>`;
+                }
+            }
+        }
+
+        async function submitComment(alertId) {
+            const operatorName = document.getElementById('comment-operator-name').value.trim();
+            const operatorRole = document.getElementById('comment-operator-role').value;
+            const content = document.getElementById('comment-content').value.trim();
+
+            if (!operatorName) {
+                alert('请输入操作人姓名');
+                return;
+            }
+            if (!content) {
+                alert('请输入评论内容');
+                return;
+            }
+
+            try {
+                await apiCall('/alerts/comments', 'POST', {
+                    alert_id: alertId,
+                    comment_type: 'comment',
+                    operator_name: operatorName,
+                    operator_role: operatorRole,
+                    content: content
+                });
+                document.getElementById('comment-content').value = '';
+                loadComments(alertId);
+            } catch (e) { alert('发表失败: ' + e.message); }
+        }
+
+        async function submitAttachment(alertId) {
+            const operatorName = document.getElementById('attachment-operator-name').value.trim();
+            const operatorRole = document.getElementById('attachment-operator-role').value;
+            const attachmentName = document.getElementById('attachment-name').value.trim();
+            const attachmentUrl = document.getElementById('attachment-url').value.trim();
+            const attachmentSize = parseInt(document.getElementById('attachment-size').value) || 0;
+
+            if (!operatorName) {
+                alert('请输入操作人姓名');
+                return;
+            }
+            if (!attachmentName) {
+                alert('请输入附件名');
+                return;
+            }
+            if (!attachmentUrl) {
+                alert('请输入附件URL');
+                return;
+            }
+
+            try {
+                await apiCall('/alerts/comments', 'POST', {
+                    alert_id: alertId,
+                    comment_type: 'attachment',
+                    operator_name: operatorName,
+                    operator_role: operatorRole,
+                    attachment_name: attachmentName,
+                    attachment_url: attachmentUrl,
+                    attachment_size: attachmentSize
+                });
+                document.getElementById('attachment-name').value = '';
+                document.getElementById('attachment-url').value = '';
+                document.getElementById('attachment-size').value = '';
+                loadComments(alertId);
+                switchCommentTab('comment');
+            } catch (e) { alert('上传失败: ' + e.message); }
         }
 
         async function repushAlert(alertId) {
@@ -1495,7 +1797,7 @@
                                     ${item.latest_box_no ? `<a href="javascript:viewBoxTimeline('${item.latest_box_no}')" style="color:#1890ff;text-decoration:none;">📦 ${item.latest_box_no}</a>` : '-'}
                                 </td>
                                 <td>
-                                    <button class="btn btn-link btn-sm" onclick="showDrillDown('${dimensionKey}', '${item.dimension_value}')">查看明细</button>
+                                    <button class="btn btn-link btn-sm" onclick="showDrillDown('${dimensionKey}', ${JSON.stringify(item.dimension_value)})">查看明细</button>
                                 </td>
                             </tr>
                         `).join('')}
@@ -1506,6 +1808,7 @@
 
         async function showDrillDown(dimension, dimensionValue) {
             const dimensionLabel = { 'customer': '客户', 'route': '线路', 'box': '箱号', 'type': '异常类型' }[dimension] || dimension;
+            const safeDimensionValue = String(dimensionValue).replace(/'/g, "\\'");
             const html = `
                 <div style="display:flex;flex-direction:column;gap:16px;">
                     <div id="drill-down-content">
@@ -1543,13 +1846,13 @@
                                 ${alerts.map(a => `
                                     <tr>
                                         <td style="font-size:12px;color:#595959;">${a.alert_no}</td>
-                                        <td><a href="javascript:closeModal();viewBoxTimeline('${a.box_no}')" style="color:#1890ff;text-decoration:none;">${a.box_no}</a></td>
+                                        <td><strong><a href="javascript:closeModal();viewBoxTimeline('${a.box_no}')" style="color:#1890ff;text-decoration:none;">${a.box_no}</a></strong></td>
                                         <td>${a.alert_type}</td>
                                         <td>${getSeverityTag(a.severity)}</td>
-                                        <td>${a.current_owner_role ? getRoleTag(a.current_owner_role) : '-'}</td>
+                                        <td>${a.current_owner_name || a.current_owner_role || '-'}</td>
                                         <td style="color:#8c8c8c;font-size:12px;">${formatTime(a.created_at)}</td>
                                         <td>
-                                            <button class="btn btn-primary btn-sm" onclick="closeModal();setTimeout(()=>showDisposalModal(${a.id}),200)">处置</button>
+                                            <button class="btn btn-primary btn-sm" onclick="closeModal();setTimeout(()=>showAlertDetail(${a.id}),200)">处置</button>
                                             <button class="btn btn-link btn-sm" onclick="closeModal();viewBoxTimeline('${a.box_no}')">时间线</button>
                                         </td>
                                     </tr>
@@ -1615,6 +1918,108 @@
             if (alertType) url += `&alert_type=${encodeURIComponent(alertType)}`;
             window.open(url, '_blank');
             closeModal();
+        }
+
+        function initReviewPage() {
+            const today = new Date().toISOString().split('T')[0];
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+            if (!document.getElementById('review-start-date').value) {
+                document.getElementById('review-start-date').value = thirtyDaysAgo;
+            }
+            if (!document.getElementById('review-end-date').value) {
+                document.getElementById('review-end-date').value = today;
+            }
+        }
+
+        async function loadReviewData() {
+            const startDate = document.getElementById('review-start-date').value;
+            const endDate = document.getElementById('review-end-date').value;
+            const customer = document.getElementById('review-customer').value.trim();
+            const route = document.getElementById('review-route').value.trim();
+            const alertType = document.getElementById('review-alert-type').value;
+            const isHandled = document.getElementById('review-is-handled').value;
+
+            const body = {
+                start_date: startDate,
+                end_date: endDate
+            };
+            if (customer) body.customer = customer;
+            if (route) body.route = route;
+            if (alertType) body.alert_type = alertType;
+            if (isHandled) body.is_handled = isHandled === 'handled';
+
+            const tbody = document.getElementById('review-table-body');
+            const summaryGrid = document.getElementById('review-summary-grid');
+            const totalSpan = document.getElementById('review-total');
+
+            tbody.innerHTML = '<tr><td colspan="10" class="empty">加载中...</td></tr>';
+            summaryGrid.innerHTML = '';
+            totalSpan.textContent = '';
+
+            try {
+                const data = await apiCall('/alerts/review/query', 'POST', body);
+                const summary = data.summary || {};
+                const alerts = data.alerts || [];
+                const total = data.total || 0;
+
+                totalSpan.textContent = `(共 ${total} 条)`;
+
+                summaryGrid.innerHTML = `
+                    <div class="stat-card blue"><div class="stat-value">${summary.total_count || 0}</div><div class="stat-label">总数</div></div>
+                    <div class="stat-card orange"><div class="stat-value">${summary.pending_count || 0}</div><div class="stat-label">待处理</div></div>
+                    <div class="stat-card green"><div class="stat-value">${summary.handled_count || 0}</div><div class="stat-label">已处理</div></div>
+                    <div class="stat-card cyan"><div class="stat-value">${summary.avg_processing_minutes !== undefined ? summary.avg_processing_minutes.toFixed(1) : '0.0'}</div><div class="stat-label">平均时长(分钟)</div></div>
+                    <div class="stat-card red"><div class="stat-value">${summary.escalated_count || 0}</div><div class="stat-label">已升级</div></div>
+                    <div class="stat-card red"><div class="stat-value">${summary.overdue_count || 0}</div><div class="stat-label">超期</div></div>
+                    <div class="stat-card red"><div class="stat-value">${summary.temp_abnormal_count || 0}</div><div class="stat-label">温控</div></div>
+                    <div class="stat-card purple"><div class="stat-value">${summary.complaint_count || 0}</div><div class="stat-label">投诉</div></div>
+                    <div class="stat-card cyan"><div class="stat-value">${summary.duplicate_count || 0}</div><div class="stat-label">重复出库</div></div>
+                    <div class="stat-card orange"><div class="stat-value">${summary.high_occupancy_count || 0}</div><div class="stat-label">高占用</div></div>
+                `;
+
+                if (alerts.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="10" class="empty">暂无数据</td></tr>';
+                } else {
+                    tbody.innerHTML = alerts.map(a => `
+                        <tr>
+                            <td style="font-size:12px;color:#595959;">${a.alert_no}</td>
+                            <td><a href="javascript:viewBoxTimeline('${a.box_no}')" style="color:#1890ff;text-decoration:none;">${a.box_no}</a></td>
+                            <td>${a.alert_type}</td>
+                            <td>${getSeverityTag(a.severity)}</td>
+                            <td>${a.responsible_node || '-'}</td>
+                            <td>${a.current_owner_name || a.current_owner_role || '-'}</td>
+                            <td>${a.is_handled ? '<span class="tag tag-success">是</span>' : '<span class="tag tag-danger">否</span>'}</td>
+                            <td>${a.handled_by || '-'}</td>
+                            <td style="color:#8c8c8c;font-size:12px;">${formatTime(a.created_at)}</td>
+                            <td>
+                                <button class="btn btn-primary btn-sm" onclick="showDisposalModal(${a.id})">处置</button>
+                                <button class="btn btn-link btn-sm" onclick="viewBoxTimeline('${a.box_no}')">时间线</button>
+                            </td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan="10" class="empty">加载失败: ${e.message}</td></tr>`;
+            }
+        }
+
+        function exportReviewCSV() {
+            const startDate = document.getElementById('review-start-date').value;
+            const endDate = document.getElementById('review-end-date').value;
+            const customer = document.getElementById('review-customer').value.trim();
+            const route = document.getElementById('review-route').value.trim();
+            const alertType = document.getElementById('review-alert-type').value;
+
+            if (!startDate || !endDate) {
+                alert('请选择日期范围');
+                return;
+            }
+
+            let url = `${API_BASE}/alerts/export?start_date=${startDate}&end_date=${endDate}`;
+            if (alertType) url += `&alert_type=${encodeURIComponent(alertType)}`;
+            if (customer) url += `&customer=${encodeURIComponent(customer)}`;
+            if (route) url += `&route=${encodeURIComponent(route)}`;
+            window.open(url, '_blank');
         }
 
         loadDashboard();

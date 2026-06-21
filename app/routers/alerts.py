@@ -10,10 +10,13 @@ from app.database import get_db
 from app.schemas import (
     AlertResponse, AlertPushRecordResponse, AlertDisposalResponse,
     HandleAlertRequest, AssignAlertRequest, BatchHandleRequest,
-    DashboardSummary, DashboardItem, DrillDownRequest, ExportRequest
+    DashboardSummary, DashboardItem, DrillDownRequest, ExportRequest,
+    AlertCommentResponse, AlertCommentRequest, ReviewQueryRequest,
+    ReviewResponse, ReviewSummary, EscalationResult
 )
 from app.services import NotificationService, run_all_checks, run_overdue_check
-from app.models import Alert, AlertPushRecord, AlertDisposal, TurnoverTask, Box
+from app.services.rules_engine import run_escalation_check
+from app.models import Alert, AlertPushRecord, AlertDisposal, TurnoverTask, Box, AlertComment
 
 router = APIRouter(prefix="/api/alerts", tags=["提醒管理"])
 
@@ -26,6 +29,7 @@ def get_alerts(
     is_handled: Optional[bool] = Query(None, description="是否已处理"),
     alert_type: Optional[str] = Query(None, description="按异常类型筛选"),
     assigned_to: Optional[str] = Query(None, description="按当前归属角色筛选"),
+    is_escalated: Optional[bool] = Query(None, description="是否已升级"),
     db: Session = Depends(get_db)
 ):
     query = db.query(Alert)
@@ -37,6 +41,8 @@ def get_alerts(
         query = query.filter(Alert.alert_type == alert_type)
     if assigned_to:
         query = query.filter(Alert.current_owner_role == assigned_to)
+    if is_escalated is not None:
+        query = query.filter(Alert.is_escalated == is_escalated)
     return query.order_by(Alert.created_at.desc()).all()
 
 
@@ -77,6 +83,8 @@ def export_alerts(
         "创建时间", "最近推送时间",
         "推送记录(角色/渠道/状态/时间)",
         "转派记录(从谁/到谁/时间)",
+        "评论记录(人/时间/内容)",
+        "附件记录(文件名/上传人/时间)",
         "处理时长(分钟)"
     ])
 
@@ -97,6 +105,25 @@ def export_alerts(
             f"{d.operator_from_name or d.operator_name}({d.operator_from_role or d.operator_role}) -> {d.assigned_to_name}({d.assigned_to_role})/{d.disposed_at.strftime('%Y-%m-%d %H:%M')}"
             for d in assign_disposals
         ]) if assign_disposals else ""
+
+        from app.models import AlertComment
+        comments = db.query(AlertComment).filter(
+            AlertComment.alert_id == a.id,
+            AlertComment.comment_type == "comment"
+        ).order_by(AlertComment.created_at.asc()).all()
+        comment_str = "; ".join([
+            f"{c.operator_name}({c.operator_role})/{c.created_at.strftime('%Y-%m-%d %H:%M')}: {c.content}"
+            for c in comments if c.content
+        ]) if comments else ""
+
+        attachments = db.query(AlertComment).filter(
+            AlertComment.alert_id == a.id,
+            AlertComment.comment_type == "attachment"
+        ).order_by(AlertComment.created_at.asc()).all()
+        attach_str = "; ".join([
+            f"{c.attachment_name}/{c.operator_name}({c.operator_role})/{c.created_at.strftime('%Y-%m-%d %H:%M')}"
+            for c in attachments if c.attachment_name
+        ]) if attachments else ""
 
         duration = ""
         if a.is_handled and a.handled_at and a.created_at:
@@ -123,6 +150,8 @@ def export_alerts(
             a.last_pushed_at.strftime("%Y-%m-%d %H:%M") if a.last_pushed_at else "",
             push_str,
             assign_str,
+            comment_str,
+            attach_str,
             duration
         ])
 
@@ -133,64 +162,6 @@ def export_alerts(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
-
-
-def _calc_dashboard_for_dimension(db: Session, dimension: str, alert_column,
-                                   task_column=None) -> List[DashboardItem]:
-    items_map = {}
-    pending_alerts = db.query(Alert).filter(Alert.is_handled == False).all()
-
-    for alert in pending_alerts:
-        if task_column is not None and alert.box_no:
-            task = db.query(TurnoverTask).filter(
-                TurnoverTask.box_no == alert.box_no,
-                TurnoverTask.status.notin_(["returned"]),
-                TurnoverTask.is_duplicate == False
-            ).order_by(TurnoverTask.id.desc()).first()
-            if task:
-                if task_column == "customer":
-                    value = task.customer
-                elif task_column == "route":
-                    value = task.route
-                else:
-                    value = None
-            else:
-                value = None
-        else:
-            value = getattr(alert, alert_column.key) if hasattr(alert, alert_column.key) else None
-
-        if not value:
-            continue
-
-        key = str(value)
-        if key not in items_map:
-            items_map[key] = {
-                "pending_count": 0,
-                "total_minutes": 0,
-                "alert_count": 0,
-                "latest_id": alert.id,
-                "latest_box": alert.box_no
-            }
-        items_map[key]["pending_count"] += 1
-        minutes = (datetime.now() - alert.created_at).total_seconds() / 60
-        items_map[key]["total_minutes"] += minutes
-        items_map[key]["alert_count"] += 1
-        if alert.id > items_map[key]["latest_id"]:
-            items_map[key]["latest_id"] = alert.id
-            items_map[key]["latest_box"] = alert.box_no
-
-    items = []
-    for key, data in items_map.items():
-        avg_minutes = data["total_minutes"] / data["alert_count"] if data["alert_count"] > 0 else 0
-        items.append(DashboardItem(
-            dimension=dimension,
-            dimension_value=key,
-            pending_count=data["pending_count"],
-            avg_processing_minutes=round(avg_minutes, 1),
-            latest_alert_id=data["latest_id"],
-            latest_box_no=data["latest_box"]
-        ))
-    return sorted(items, key=lambda x: -x.pending_count)
 
 
 @router.get("/dashboard/summary", response_model=DashboardSummary, summary="责任节点看板-总览")
@@ -332,6 +303,7 @@ def batch_handle_alerts(req: BatchHandleRequest, db: Session = Depends(get_db)):
         alert.is_read = True
         alert.current_owner_role = req.handled_by
         alert.current_owner_name = req.handled_by
+        alert.assigned_at = now
         db.flush()
 
         disposal = AlertDisposal(
@@ -380,7 +352,144 @@ def run_overdue(db: Session = Depends(get_db)):
     }
 
 
-@router.get("/{alert_id}", summary="查询提醒详情（含推送记录+处置记录）")
+@router.post("/check/escalation", response_model=List[EscalationResult], summary="手动执行超时升级检查")
+def run_escalation(db: Session = Depends(get_db)):
+    escalated_alerts = run_escalation_check(db)
+    result = []
+    for alert in escalated_alerts:
+        hours_overdue = (datetime.now() - alert.assigned_at).total_seconds() / 3600 if alert.assigned_at else 0
+        result.append(EscalationResult(
+            alert_id=alert.id,
+            alert_no=alert.alert_no,
+            box_no=alert.box_no,
+            previous_owner_role=alert.current_owner_role,
+            escalated_to=alert.escalated_to or "manager",
+            hours_overdue=round(hours_overdue, 1)
+        ))
+    return result
+
+
+@router.post("/review/query", response_model=ReviewResponse, summary="处置复盘多维度查询")
+def review_query(req: ReviewQueryRequest, db: Session = Depends(get_db)):
+    query = db.query(Alert)
+
+    if req.start_date:
+        try:
+            sd = datetime.strptime(req.start_date, "%Y-%m-%d")
+            query = query.filter(Alert.created_at >= sd)
+        except ValueError:
+            pass
+    if req.end_date:
+        try:
+            ed = datetime.strptime(req.end_date, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            query = query.filter(Alert.created_at <= ed)
+        except ValueError:
+            pass
+    if req.alert_type:
+        query = query.filter(Alert.alert_type == req.alert_type)
+    if req.is_handled is not None:
+        query = query.filter(Alert.is_handled == req.is_handled)
+
+    alerts = query.all()
+
+    if req.customer or req.route:
+        box_no_to_task = {}
+        alert_ids = []
+        for alert in alerts:
+            if not alert.box_no:
+                continue
+            if alert.box_no not in box_no_to_task:
+                task = db.query(TurnoverTask).filter(
+                    TurnoverTask.box_no == alert.box_no,
+                    TurnoverTask.status.notin_(["returned"]),
+                    TurnoverTask.is_duplicate == False
+                ).order_by(TurnoverTask.id.desc()).first()
+                box_no_to_task[alert.box_no] = task
+            task = box_no_to_task[alert.box_no]
+            if not task:
+                continue
+            if req.customer and task.customer != req.customer:
+                continue
+            if req.route and task.route != req.route:
+                continue
+            alert_ids.append(alert.id)
+        alerts = [a for a in alerts if a.id in alert_ids]
+
+    total_count = len(alerts)
+    pending_count = sum(1 for a in alerts if not a.is_handled)
+    handled_count = sum(1 for a in alerts if a.is_handled)
+    escalated_count = sum(1 for a in alerts if a.is_escalated)
+    overdue_count = sum(1 for a in alerts if a.alert_type == "超期未回")
+    temp_abnormal_count = sum(1 for a in alerts if a.alert_type == "温控异常")
+    complaint_count = sum(1 for a in alerts if a.alert_type == "客户投诉")
+    duplicate_count = sum(1 for a in alerts if a.alert_type == "同箱重复出库")
+
+    total_minutes = 0
+    for a in alerts:
+        if a.is_handled and a.handled_at and a.created_at:
+            total_minutes += (a.handled_at - a.created_at).total_seconds() / 60
+        elif not a.is_handled and a.created_at:
+            total_minutes += (datetime.now() - a.created_at).total_seconds() / 60
+    avg_processing_minutes = round(total_minutes / total_count, 1) if total_count > 0 else 0
+
+    high_occupation_count = 0
+    if req.customer:
+        from app.services.rules_engine import check_customer_high_occupation
+        is_high, count = check_customer_high_occupation(db, req.customer)
+        if is_high:
+            high_occupation_count = 1
+
+    summary = ReviewSummary(
+        total_count=total_count,
+        pending_count=pending_count,
+        handled_count=handled_count,
+        avg_processing_minutes=avg_processing_minutes,
+        escalated_count=escalated_count,
+        overdue_count=overdue_count,
+        temp_abnormal_count=temp_abnormal_count,
+        complaint_count=complaint_count,
+        duplicate_count=duplicate_count,
+        high_occupation_count=high_occupation_count
+    )
+
+    alert_responses = [AlertResponse.model_validate(a) for a in sorted(alerts, key=lambda x: x.created_at, reverse=True)]
+
+    return ReviewResponse(
+        summary=summary,
+        alerts=alert_responses,
+        total=total_count
+    )
+
+
+@router.get("/comments", response_model=List[AlertCommentResponse], summary="查询所有评论")
+def get_all_comments(db: Session = Depends(get_db)):
+    return db.query(AlertComment).order_by(AlertComment.created_at.desc()).all()
+
+
+@router.post("/comments", response_model=AlertCommentResponse, summary="新增评论")
+def create_comment(req: AlertCommentRequest, db: Session = Depends(get_db)):
+    alert = db.query(Alert).filter(Alert.id == req.alert_id).first()
+    if not alert:
+        return None
+
+    comment = AlertComment(
+        alert_id=req.alert_id,
+        alert_no=alert.alert_no,
+        comment_type=req.comment_type,
+        operator_name=req.operator_name,
+        operator_role=req.operator_role,
+        content=req.content,
+        attachment_name=req.attachment_name,
+        attachment_url=req.attachment_url,
+        attachment_size=req.attachment_size
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+@router.get("/{alert_id}", summary="查询提醒详情（含推送记录+处置记录+评论）")
 def get_alert(alert_id: int, db: Session = Depends(get_db)):
     alert = db.query(Alert).filter(Alert.id == alert_id).first()
     if not alert:
@@ -391,10 +500,14 @@ def get_alert(alert_id: int, db: Session = Depends(get_db)):
     disposals = db.query(AlertDisposal).filter(
         AlertDisposal.alert_id == alert_id
     ).order_by(AlertDisposal.disposed_at.desc()).all()
+    comments = db.query(AlertComment).filter(
+        AlertComment.alert_id == alert_id
+    ).order_by(AlertComment.created_at.desc()).all()
     return {
         "alert": AlertResponse.model_validate(alert).model_dump(),
         "push_records": [AlertPushRecordResponse.model_validate(r).model_dump() for r in push_records],
-        "disposals": [AlertDisposalResponse.model_validate(d).model_dump() for d in disposals]
+        "disposals": [AlertDisposalResponse.model_validate(d).model_dump() for d in disposals],
+        "comments": [AlertCommentResponse.model_validate(c).model_dump() for c in comments]
     }
 
 
@@ -410,6 +523,13 @@ def get_alert_disposals(alert_id: int, db: Session = Depends(get_db)):
     return db.query(AlertDisposal).filter(
         AlertDisposal.alert_id == alert_id
     ).order_by(AlertDisposal.disposed_at.desc()).all()
+
+
+@router.get("/{alert_id}/comments", response_model=List[AlertCommentResponse], summary="查询提醒评论")
+def get_alert_comments(alert_id: int, db: Session = Depends(get_db)):
+    return db.query(AlertComment).filter(
+        AlertComment.alert_id == alert_id
+    ).order_by(AlertComment.created_at.desc()).all()
 
 
 @router.post("/{alert_id}/push", summary="重新推送提醒")
@@ -437,13 +557,15 @@ def handle_alert(alert_id: int, req: HandleAlertRequest, db: Session = Depends(g
         return disp
     prev_owner_role = alert.current_owner_role
     prev_owner_name = alert.current_owner_name
+    now = datetime.now()
     alert.is_handled = True
     alert.handled_by = req.handled_by
-    alert.handled_at = datetime.now()
+    alert.handled_at = now
     alert.handled_note = req.handled_note
     alert.is_read = True
     alert.current_owner_role = req.handled_by
     alert.current_owner_name = req.handled_by
+    alert.assigned_at = now
     db.flush()
     disposal = AlertDisposal(
         alert_id=alert.id,
@@ -455,7 +577,7 @@ def handle_alert(alert_id: int, req: HandleAlertRequest, db: Session = Depends(g
         operator_from_role=prev_owner_role,
         operator_from_name=prev_owner_name,
         disposal_result=req.disposal_result or "已跟进处理",
-        disposed_at=datetime.now()
+        disposed_at=now
     )
     db.add(disposal)
     db.commit()
@@ -470,10 +592,12 @@ def assign_alert(alert_id: int, req: AssignAlertRequest, db: Session = Depends(g
         return None
     prev_owner_role = alert.current_owner_role
     prev_owner_name = alert.current_owner_name
+    now = datetime.now()
     alert.assigned_to = req.assigned_to_role
     alert.current_owner_role = req.assigned_to_role
     alert.current_owner_name = req.assigned_to_name
     alert.is_read = True
+    alert.assigned_at = now
     db.flush()
     disposal = AlertDisposal(
         alert_id=alert.id,
@@ -487,9 +611,67 @@ def assign_alert(alert_id: int, req: AssignAlertRequest, db: Session = Depends(g
         operator_from_role=prev_owner_role or req.operator_role,
         operator_from_name=prev_owner_name or req.operator_name,
         disposal_result=f"从 {prev_owner_name or req.operator_name}({prev_owner_role or req.operator_role}) 转派给 {req.assigned_to_name}({req.assigned_to_role})",
-        disposed_at=datetime.now()
+        disposed_at=now
     )
     db.add(disposal)
     db.commit()
     db.refresh(disposal)
     return disposal
+
+
+def _calc_dashboard_for_dimension(db: Session, dimension: str, alert_column,
+                                   task_column=None) -> List[DashboardItem]:
+    items_map = {}
+    pending_alerts = db.query(Alert).filter(Alert.is_handled == False).all()
+
+    for alert in pending_alerts:
+        if task_column is not None and alert.box_no:
+            task = db.query(TurnoverTask).filter(
+                TurnoverTask.box_no == alert.box_no,
+                TurnoverTask.status.notin_(["returned"]),
+                TurnoverTask.is_duplicate == False
+            ).order_by(TurnoverTask.id.desc()).first()
+            if task:
+                if task_column == "customer":
+                    value = task.customer
+                elif task_column == "route":
+                    value = task.route
+                else:
+                    value = None
+            else:
+                value = None
+        else:
+            value = getattr(alert, alert_column.key) if hasattr(alert, alert_column.key) else None
+
+        if not value:
+            continue
+
+        key = str(value)
+        if key not in items_map:
+            items_map[key] = {
+                "pending_count": 0,
+                "total_minutes": 0,
+                "alert_count": 0,
+                "latest_id": alert.id,
+                "latest_box": alert.box_no
+            }
+        items_map[key]["pending_count"] += 1
+        minutes = (datetime.now() - alert.created_at).total_seconds() / 60
+        items_map[key]["total_minutes"] += minutes
+        items_map[key]["alert_count"] += 1
+        if alert.id > items_map[key]["latest_id"]:
+            items_map[key]["latest_id"] = alert.id
+            items_map[key]["latest_box"] = alert.box_no
+
+    items = []
+    for key, data in items_map.items():
+        avg_minutes = data["total_minutes"] / data["alert_count"] if data["alert_count"] > 0 else 0
+        items.append(DashboardItem(
+            dimension=dimension,
+            dimension_value=key,
+            pending_count=data["pending_count"],
+            avg_processing_minutes=round(avg_minutes, 1),
+            latest_alert_id=data["latest_id"],
+            latest_box_no=data["latest_box"]
+        ))
+    return sorted(items, key=lambda x: -x.pending_count)

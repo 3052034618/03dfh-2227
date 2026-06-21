@@ -112,12 +112,18 @@ class Alert(Base):
     assigned_to = Column(String(50), nullable=True)
     current_owner_role = Column(String(50), nullable=True)
     current_owner_name = Column(String(50), nullable=True)
+    assigned_at = Column(DateTime, nullable=True)
+    is_escalated = Column(Boolean, default=False)
+    escalated_at = Column(DateTime, nullable=True)
+    escalated_to = Column(String(50), nullable=True)
+    escalation_note = Column(Text, nullable=True)
     last_pushed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now)
 
     box = relationship("Box", back_populates="alerts")
     push_records = relationship("AlertPushRecord", back_populates="alert")
     disposals = relationship("AlertDisposal", back_populates="alert")
+    comments = relationship("AlertComment", back_populates="alert")
 
 
 class AlertPushRecord(Base):
@@ -156,6 +162,24 @@ class AlertDisposal(Base):
     disposed_at = Column(DateTime, default=datetime.now)
 
     alert = relationship("Alert", back_populates="disposals")
+
+
+class AlertComment(Base):
+    __tablename__ = "alert_comments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    alert_id = Column(Integer, ForeignKey("alerts.id"), nullable=False)
+    alert_no = Column(String(50), index=True, nullable=False)
+    comment_type = Column(String(20), default="comment", nullable=False)  # comment / attachment
+    operator_name = Column(String(50), nullable=False)
+    operator_role = Column(String(50), nullable=False)
+    content = Column(Text, nullable=True)
+    attachment_name = Column(String(200), nullable=True)
+    attachment_url = Column(String(500), nullable=True)
+    attachment_size = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    alert = relationship("Alert", back_populates="comments")
 
 
 class SystemConfig(Base):

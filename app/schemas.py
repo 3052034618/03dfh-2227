@@ -82,6 +82,11 @@ class AlertResponse(BaseModel):
     assigned_to: Optional[str]
     current_owner_role: Optional[str]
     current_owner_name: Optional[str]
+    assigned_at: Optional[datetime]
+    is_escalated: bool
+    escalated_at: Optional[datetime]
+    escalated_to: Optional[str]
+    escalation_note: Optional[str]
     last_pushed_at: Optional[datetime]
     created_at: datetime
 
@@ -225,3 +230,68 @@ class ExportRequest(BaseModel):
     start_date: Optional[str] = Field(None, description="开始日期 YYYY-MM-DD")
     end_date: Optional[str] = Field(None, description="结束日期 YYYY-MM-DD")
     alert_type: Optional[str] = Field(None, description="异常类型筛选")
+
+
+class AlertCommentResponse(BaseModel):
+    id: int
+    alert_id: int
+    alert_no: str
+    comment_type: str
+    operator_name: str
+    operator_role: str
+    content: Optional[str]
+    attachment_name: Optional[str]
+    attachment_url: Optional[str]
+    attachment_size: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AlertCommentRequest(BaseModel):
+    alert_id: int = Field(..., description="提醒ID")
+    comment_type: str = Field("comment", description="类型: comment/attachment")
+    operator_name: str = Field(..., description="操作人姓名")
+    operator_role: str = Field(..., description="操作人角色")
+    content: Optional[str] = Field(None, description="评论内容")
+    attachment_name: Optional[str] = Field(None, description="附件名称")
+    attachment_url: Optional[str] = Field(None, description="附件URL")
+    attachment_size: Optional[int] = Field(None, description="附件大小(字节)")
+
+
+class ReviewQueryRequest(BaseModel):
+    start_date: Optional[str] = Field(None, description="开始日期 YYYY-MM-DD")
+    end_date: Optional[str] = Field(None, description="结束日期 YYYY-MM-DD")
+    customer: Optional[str] = Field(None, description="客户筛选")
+    route: Optional[str] = Field(None, description="线路筛选")
+    alert_type: Optional[str] = Field(None, description="异常类型筛选")
+    is_handled: Optional[bool] = Field(None, description="是否已处理")
+
+
+class ReviewSummary(BaseModel):
+    total_count: int
+    pending_count: int
+    handled_count: int
+    avg_processing_minutes: float
+    escalated_count: int
+    overdue_count: int
+    temp_abnormal_count: int
+    complaint_count: int
+    duplicate_count: int
+    high_occupation_count: int
+
+
+class ReviewResponse(BaseModel):
+    summary: ReviewSummary
+    alerts: List[AlertResponse]
+    total: int
+
+
+class EscalationResult(BaseModel):
+    alert_id: int
+    alert_no: str
+    box_no: Optional[str]
+    previous_owner_role: Optional[str]
+    escalated_to: str
+    hours_overdue: float

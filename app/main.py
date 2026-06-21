@@ -56,6 +56,10 @@ def init_default_configs():
             ("min_temperature", "2", "最低温度阈值(°C)"),
             ("max_temperature", "8", "最高温度阈值(°C)"),
             ("customer_high_occupation_threshold", "10", "客户高占用阈值(箱)"),
+            ("escalation_timeout_hours_dispatch", "24", "调度角色超时升级阈值(小时)"),
+            ("escalation_timeout_hours_warehouse", "24", "仓库角色超时升级阈值(小时)"),
+            ("escalation_timeout_hours_customer_service", "12", "客服角色超时升级阈值(小时)"),
+            ("escalation_timeout_hours_manager", "48", "管理角色超时升级阈值(小时)"),
         ]
         for key, value, desc in default_configs:
             existing = db.query(SystemConfig).filter(SystemConfig.config_key == key).first()

@@ -74,7 +74,8 @@ def create_alert(
         latest_handover=latest_handover,
         content=content,
         target_roles=target_roles,
-        current_owner_role=responsible_node
+        current_owner_role=responsible_node,
+        assigned_at=datetime.now()
     )
     db.add(alert)
     db.flush()
@@ -158,6 +159,66 @@ def run_overdue_check(db: Session) -> List[Alert]:
 
     db.commit()
     return alerts
+
+
+def _get_escalation_timeout_hours(db: Session, role: str) -> int:
+    """获取指定角色的超时升级阈值（小时）"""
+    from app.models import SystemConfig
+    key = f"escalation_timeout_hours_{role}"
+    config = db.query(SystemConfig).filter(SystemConfig.config_key == key).first()
+    if config:
+        try:
+            return int(config.config_value)
+        except ValueError:
+            pass
+    return 24
+
+
+def run_escalation_check(db: Session) -> List[Alert]:
+    """检查超时未处理的提醒并升级给管理人员"""
+    from app.models import Alert
+    from app.services.notification import NotificationService
+    notification = NotificationService(db)
+
+    escalated = []
+    now = datetime.now()
+
+    pending_alerts = db.query(Alert).filter(
+        Alert.is_handled == False,
+        Alert.is_escalated == False,
+        Alert.current_owner_role.isnot(None),
+        Alert.assigned_at.isnot(None)
+    ).all()
+
+    for alert in pending_alerts:
+        timeout_hours = _get_escalation_timeout_hours(db, alert.current_owner_role)
+        hours_since_assign = (now - alert.assigned_at).total_seconds() / 3600
+
+        if hours_since_assign >= timeout_hours:
+            alert.is_escalated = True
+            alert.escalated_at = now
+            alert.escalated_to = "manager"
+            alert.escalation_note = f"超过 {timeout_hours} 小时未处理，自动升级"
+            alert.current_owner_role = "manager"
+            alert.current_owner_name = "管理人员"
+            alert.assigned_at = now
+
+            manager_alert = create_alert(
+                db=db,
+                alert_type=f"超时升级-{alert.alert_type}",
+                severity="high",
+                responsible_node="manager",
+                suggested_action=f"提醒 {alert.alert_no} 已超时 {round(hours_since_assign, 1)} 小时未处理，请介入协调",
+                box_id=alert.box_id,
+                box_no=alert.box_no,
+                extra_info=f"原归属: {alert.current_owner_name}({alert.current_owner_role})，超时 {timeout_hours} 小时，原问题: {alert.content[:100]}",
+                target_roles="manager"
+            )
+            notification.push_alert(manager_alert)
+            escalated.append(alert)
+
+    db.commit()
+    return escalated
 
 
 def run_all_checks(db: Session) -> List[Alert]:
